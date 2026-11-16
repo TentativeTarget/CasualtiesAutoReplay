@@ -56,6 +56,16 @@ namespace Together.Replay
         public static void Draw()
         {
             if (!Visible) return;
+
+            var esc = Event.current;
+            if (esc != null && esc.type == EventType.KeyDown && esc.keyCode == KeyCode.Escape)
+            {
+                esc.Use();
+                Visible = false;
+                ReplaySfx.Close();
+                return;
+            }
+
             Styles();
 
             float sc = Mathf.Max(1f, UIBullshit.uiScale);

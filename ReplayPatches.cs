@@ -1408,6 +1408,15 @@ namespace Together.Replay
 
             static bool Prefix(MethodBase __originalMethod, object[] __args, ref bool __result)
             {
+                // 我们的面板开着时，只吞掉 ESC（避免游戏弹出菜单盖在面板下面）。
+                // 其它键一律放行，免得影响正常操作。
+                if (ReplayPlugin.UiOpen && __args != null && __args.Length == 1
+                    && __args[0] is KeyCode ek && ek == KeyCode.Escape)
+                {
+                    __result = false;
+                    return false;
+                }
+
                 if (!ReplayPlugin.InputBlocked) return true;
 
                 if (__args != null && __args.Length == 1 && __args[0] is KeyCode kc)
