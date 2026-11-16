@@ -285,12 +285,26 @@ namespace Together.Replay
                 RemoveFakeClientNow();
                 BytesWritten = 0;
                 try { BytesWritten = new FileInfo(_path).Length; } catch { }
+                bool useless = !_sawStartGame && _writer != null && _writer.RecordCount < 400
+                               && _writer.DurationMs < 15000;
+
                 _writer.Dispose();
                 _writer = null;
                 _player = null;
                 _peer = null;
                 _needPhantom = false;
                 PhantomId = 0xFF;
+
+                // 开了房没进世界（没有引导包、没多少记录）→ 别留下空文件
+                if (useless)
+                {
+                    try
+                    {
+                        System.IO.File.Delete(_path);
+                        ReplayLog.Info("recorder: 没有进入世界，已删除空录像 " + System.IO.Path.GetFileName(_path));
+                    }
+                    catch (Exception e) { ReplayLog.Warn("recorder: 删除空录像失败 " + e.Message); }
+                }
                 ReplayLog.Info("recorder: ===== 停止录制 frame=" + Time.frameCount + " t=" + Time.realtimeSinceStartup.ToString("0.00") + " =====");
                 ReplayLog.Info("recorder: 停止，文件 " + _path + " (" + (BytesWritten / 1024 / 1024) + " MB)");
             }
