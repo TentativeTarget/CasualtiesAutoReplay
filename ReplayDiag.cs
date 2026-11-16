@@ -65,16 +65,19 @@ namespace Together.Replay
                     string nm = tx.name.ToLowerInvariant();
                     if (!(nm.Contains("biome") || nm.Contains("icon"))) continue;
                     ReplayLog.Info("biome~tex: " + tx.name + " " + tx.width + "x" + tx.height);
-                    // 顺手导出成 PNG，方便直接看
-                    try
+                    // 顺手导出成 PNG（只在诊断模式下写文件，正式版不留 dump）
+                    if (ReplayPlugin.Diagnostics)
                     {
-                        var dir = System.IO.Path.Combine(ReplayUiAssets.Dir, "_dump");
-                        System.IO.Directory.CreateDirectory(dir);
-                        var png = tx.EncodeToPNG();
-                        if (png != null && png.Length > 0)
-                            System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, tx.name + ".png"), png);
+                        try
+                        {
+                            var dir = System.IO.Path.Combine(ReplayUiAssets.Dir, "_dump");
+                            System.IO.Directory.CreateDirectory(dir);
+                            var png = tx.EncodeToPNG();
+                            if (png != null && png.Length > 0)
+                                System.IO.File.WriteAllBytes(System.IO.Path.Combine(dir, tx.name + ".png"), png);
+                        }
+                        catch { }
                     }
-                    catch { }
                     if (++tcount > 40) break;
                 }
 

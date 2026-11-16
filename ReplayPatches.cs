@@ -1702,7 +1702,7 @@ namespace Together.Replay
         {
             "line-fx-probe", "line-positions-probe", "sprite-probe", "instantiate-name-probe",
             "guard-publish-probe", "guard-aftersim-probe", "talk-probe",
-            "guard-death-probe", "destroy-probe",
+            "guard-death-probe", "destroy-probe", "anim-layers",
         };
 
         static bool IsProbe(string name) => _probes.Contains(name);

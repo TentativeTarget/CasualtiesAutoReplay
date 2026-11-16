@@ -36,7 +36,7 @@
 | BepInEx | 5.4.23.5 + HarmonyX |
 | 目标框架 | netstandard2.1，.NET SDK 8 编译 |
 
-游戏根目录（本机）：`E:\SteamLibrary\steamapps\common\Casualties Unknown`
+游戏根目录（本机路径因人而异，下同）：`<游戏目录>`
 录像目录：`%LocalAppData%Low\Orsoniks\CasualtiesUnknown\mp_replays\`
 日志：`<游戏>\BepInEx\LogOutput.log`（UTF-8）
 
@@ -67,7 +67,7 @@ HEAD   : 见 git log -1
 ```powershell
 cd "<仓库>"
 # 必须 -t:Rebuild：bin 被删过之后增量构建会"假装成功"、实际不产出 dll
-dotnet build CasualtiesReplay.csproj -c Release -t:Rebuild -v q -nologo -p:GameDir="E:\SteamLibrary\steamapps\common\Casualties Unknown"
+dotnet build CasualtiesReplay.csproj -c Release -t:Rebuild -v q -nologo -p:GameDir="<游戏目录>"
 
 Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" -Force
 ```

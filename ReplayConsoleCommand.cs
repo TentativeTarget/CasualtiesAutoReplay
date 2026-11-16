@@ -77,6 +77,11 @@ namespace Together.Replay
         {
             try
             {
+                if (!ReplayPlugin.Diagnostics)
+                {
+                    ReplayLog.Warn("replaydump: 需要 [Debug] Diagnostics=true 才能用（dump 会写文件到插件目录）");
+                    return;
+                }
                 string what = args != null && args.Length > 1 ? args[1].ToLowerInvariant() : "scene";
                 if (what.StartsWith("res")) ReplayDiag.DumpResourceNames();
                 else ReplayDiag.DumpSceneUi();

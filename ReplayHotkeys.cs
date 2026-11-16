@@ -41,16 +41,21 @@ namespace Together.Replay
 
                 if (ReplayKeys.Down(ReplayKeys.ReloadArt))
                 {
-                    if (shift) ReplayDiag.DumpResourceNames();
+                    if (shift && ReplayPlugin.Diagnostics) ReplayDiag.DumpResourceNames();
                     else { ReplayUiAssets.Reload(); ReplayRecordUi.SetStatus("贴图已重载"); }
                 }
-                if (ReplayKeys.Down(ReplayKeys.DumpScene)) { ReplayDiag.DumpSceneUi(); _status = "场景对象诊断"; }
-                if (ReplayKeys.Down(ReplayKeys.DumpResources)) { ReplayDiag.DumpResourceNames(); _status = "资源诊断"; }
-                if (ReplayKeys.Down(ReplayKeys.DumpBiomes)) { ReplayDiag.DumpBiomeSprites(); _status = "生态区图诊断"; }
-                if (ReplayKeys.Down(ReplayKeys.AnimDiag))
+                // 诊断 dump 只在 [Debug] Diagnostics=true 时可用：会写文件到插件目录，
+                // 正式版不该被误触发。
+                if (ReplayPlugin.Diagnostics)
                 {
-                    if (shift) ReplayDiag.DumpSceneUi();
-                    else { ReplayMode.DumpAnimState(); _status = "动画诊断"; }
+                    if (ReplayKeys.Down(ReplayKeys.DumpScene)) { ReplayDiag.DumpSceneUi(); _status = "场景对象诊断"; }
+                    if (ReplayKeys.Down(ReplayKeys.DumpResources)) { ReplayDiag.DumpResourceNames(); _status = "资源诊断"; }
+                    if (ReplayKeys.Down(ReplayKeys.DumpBiomes)) { ReplayDiag.DumpBiomeSprites(); _status = "生态区图诊断"; }
+                    if (ReplayKeys.Down(ReplayKeys.AnimDiag))
+                    {
+                        if (shift) ReplayDiag.DumpSceneUi();
+                        else { ReplayMode.DumpAnimState(); _status = "动画诊断"; }
+                    }
                 }
                 if (ReplayKeys.Down(ReplayKeys.Spectator))
                 {
