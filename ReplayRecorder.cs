@@ -124,8 +124,7 @@ namespace Together.Replay
         static bool _sawStartGame;
         static byte[] _scratch = new byte[ReplayConst.MaxRecord];
 
-        // 威胁音乐状态采样（5Hz，只在变化够大/主题变了/刚掉到 0 时写一条）
-        static float _threatSampleAt;
+        // 威胁音乐状态采样（逐帧，只在有变化时写一条）
         static float _threatLastSent = -1f;
         static int _threatLastTheme = int.MinValue;
 
@@ -178,7 +177,6 @@ namespace Together.Replay
             _rngCaptured = false;
             _seedCaptured = false;
             _biomeRecorded = false;   // 同一个道理：否则第二份文件的头里永远没有 biome，层名会错
-            _threatSampleAt = 0f;
             _threatLastSent = -1f;
             _threatLastTheme = int.MinValue;
 
@@ -648,25 +646,26 @@ namespace Together.Replay
         }
 
         /// <summary>
-        /// 5Hz 采一次"威胁音乐状态"。客户端本地的倒计时，网络里没有，
-        /// 所以只能从本机抓；回放端照抄就能还原战斗音乐，不用管是谁触发的。
+        /// 逐帧采"威胁音乐状态"。客户端本地的倒计时，网络里没有，只能从本机抓。
+        ///
+        /// 精度优先：threatMusicTime 每帧 -deltaTime，只有逐帧抄下来，
+        /// "哪里淡出、哪里又被重新拉满"才能完全对上。
+        /// 代价约 60 条/秒 × 9 字节 ≈ 0.5KB/s（一场 5 分钟的战斗 ~150KB），
+        /// 相对两三分钟的录像体积（MB 级）可以忽略。
         /// </summary>
         static void SampleThreatState()
         {
             try
             {
-                float now = Time.unscaledTime;
-                if (now < _threatSampleAt) return;
-                _threatSampleAt = now + 0.2f;
-
                 var cam = PlayerCamera.main;
                 if (cam == null) return;
+
                 float t = cam.threatMusicTime;
                 int theme = cam.currentThreatTheme;
 
-                bool wentSilent = t <= 0f && _threatLastSent > 0f;
-                bool changed = t > 0f && (Mathf.Abs(t - _threatLastSent) >= 0.4f || theme != _threatLastTheme);
-                if (!wentSilent && !changed) return;
+                // 一直是静默就不用写（否则整局都在刷 0）；只在"刚掉到 0"那帧写一条
+                if (t <= 0f && _threatLastSent <= 0f) return;
+                if (t > 0f && Mathf.Abs(t - _threatLastSent) < 0.001f && theme == _threatLastTheme) return;
 
                 _threatLastSent = t;
                 _threatLastTheme = theme;
@@ -1369,7 +1368,9 @@ namespace Together.Replay
 
             // 只合并同一个玩家同一次攻击产生的重复调用（<20ms），真实攻速交给游戏自己决定
             float now = Time.unscaledTime;
-            if (_lastSwingByPlayer.TryGetValue(playerId, out float last) && now - last < 0.02f) return;
+            // 精度优先：5ms 只够挡"同一次攻击被多条路径重复调用"，
+            // 高攻速武器（0.05s 一发）不会再被并掉。
+            if (_lastSwingByPlayer.TryGetValue(playerId, out float last) && now - last < 0.005f) return;
             _lastSwingByPlayer[playerId] = now;
 
             _swings++;

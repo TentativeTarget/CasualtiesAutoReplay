@@ -526,8 +526,10 @@ namespace Together.Replay
                         // 同一个粒子对象 0.2s 内只记一次（Play 可能会被多帧/多路径调用）
                         int pid = ps.GetInstanceID();
                         float nowP = Time.unscaledTime;
+                        // 精度优先：只挡"同一帧被多条路径重复调用"（50ms 内），
+                        // 连发武器 0.1s 一发也必须各记一条，不能抽稀。
                         for (int pi2 = 0; pi2 < _recentPsId.Count; pi2++)
-                            if (_recentPsId[pi2] == pid && nowP - _recentPsAt[pi2] < 0.2f) return;
+                            if (_recentPsId[pi2] == pid && nowP - _recentPsAt[pi2] < 0.05f) return;
                         _recentPsId.Add(pid); _recentPsAt.Add(nowP);
                         if (_recentPsId.Count > 64) { _recentPsId.RemoveAt(0); _recentPsAt.RemoveAt(0); }
 
@@ -955,7 +957,8 @@ namespace Together.Replay
                 {
                     var lp = ScavPlayer.LocalPlayer;
                     if (lp == null || lp.body == null) return;
-                    if (Vector2.Distance(pos, lp.body.transform.position) > 40f) return;
+                    // 精度优先：远处的声音也要录（原来 40m 会把远处的爆炸/枪声整段抹掉）
+                    if (Vector2.Distance(pos, lp.body.transform.position) > 120f) return;
                     ReplayRecorder.SoundEvent(clip, pos);
                 }
                 catch { }
