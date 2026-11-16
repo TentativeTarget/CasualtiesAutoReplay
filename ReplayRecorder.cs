@@ -141,6 +141,18 @@ namespace Together.Replay
             _writer = writer;
             _needPhantom = true;
 
+            // 新一次录制 = 新的一局：引导包缓存必须是这一局的。
+            // 不清零会导致第二次开局仍在用上一局的种子/开局公告（甚至直接判定"已有引导"而不缓存）。
+            try
+            {
+                _bootstrapCache.Clear();
+                _bootstrapBytes = 0;
+                _bootstrapFlushed = false;
+                _chunkDumps = 0;
+                ReplayLog.Info("recorder: 已重置引导包缓存（新一局）");
+            }
+            catch { }
+
             Clock.Restart();
             _lastStamp = 0;
 
