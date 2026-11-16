@@ -165,6 +165,14 @@ namespace Together.Replay
             _needPhantom = true;
             _bootstrapInFile = false;
 
+            // 每个文件都要重新判断"这份录像里到底有没有引导"。
+            // 以前 _sawStartGame 是进程级静态字段、换文件时不清零：上一个文件里看到过开局公告，
+            // 后面半路开录的文件头也会写 bootstrap=1，回放时以为有引导，
+            // 结果客户端永远建不出世界（HANDOVER 6.1 的"卡在大厅"就是这个）。
+            _sawStartGame = false;
+            _rngCaptured = false;
+            _seedCaptured = false;
+
             // 新一次录制 = 新的一局：引导包缓存必须是这一局的。
             // 不清零会导致第二次开局仍在用上一局的种子/开局公告（甚至直接判定"已有引导"而不缓存）。
             try
@@ -200,10 +208,8 @@ namespace Together.Replay
                 var w = WorldGeneration.world;
                 if (HasBootstrap && w != null && w.worldExists)
                 {
-                    FlushBootstrapCache(writer);
-                    writer.SetMeta("bootstrap", "1");
-                    _bootstrapInFile = true;
-                    _sawStartGame = true;   // 引导已在文件里，之后的记录不再进缓存
+                    // 写成功才算"引导在文件里"：_sawStartGame 由 NoteBootstrapRecord 按内容置位
+                    _bootstrapInFile = FlushBootstrapCache(writer) > 0;
                 }
             }
             catch (Exception e) { ReplayLog.Warn("recorder: 写入引导包失败 " + e.Message); }
@@ -232,9 +238,9 @@ namespace Together.Replay
                     if (n == 0 && !string.IsNullOrEmpty(sig)) n = BorrowBootstrap(writer, _path, sig);
                     if (n > 0)
                     {
-                        writer.SetMeta("bootstrap", "1");
-                        _bootstrapInFile = true;
-                        _sawStartGame = true;
+                        _bootstrapInFile = _sawStartGame;   // 借来的里面必须真有开局公告/种子才算数
+                        if (!_bootstrapInFile)
+                            ReplayLog.Warn("recorder: 借来的 " + n + " 条里没有开局公告/种子，这份录像仍然无法独立回放");
                         ReplayLog.Info("recorder: 从同世界的旧录像借来引导包（" + n + " 条，worldToken=" + _worldToken + "）");
                     }
                     else
@@ -323,6 +329,7 @@ namespace Together.Replay
                         prevMs = r.TimeMs;
 
                         writer.Write(r.Kind, r.Pov, r.Tick, dt, r.Data, r.Length);
+                        NoteBootstrapRecord(r.Data, r.Length);
                         copied++;
                     }
                 }
@@ -373,6 +380,7 @@ namespace Together.Replay
                                 prevMs = r.TimeMs;
 
                                 writer.Write(r.Kind, r.Pov, r.Tick, dt, r.Data, r.Length);
+                                NoteBootstrapRecord(r.Data, r.Length);
                                 copied++;
                             }
                         }
@@ -415,7 +423,10 @@ namespace Together.Replay
             if (_writer == null) return;
             try
             {
-                _writer.SetMeta("bootstrap", (_bootstrapInFile || _sawStartGame) ? "1" : "0");
+                // 只认"真的写进了这个文件"（_sawStartGame 现在按内容置位）
+                _writer.SetMeta("bootstrap", _sawStartGame ? "1" : "0");
+                if (_sawStartGame) _writer.SetMeta("bootrec", "1");
+                else ReplayLog.Warn("recorder: 这份录像里没有开局公告/种子（半路开录且没借到引导），从主菜单播放不了");
                 if (_attackRelays > 0) _writer.SetMeta("attacks", _attackRelays.ToString());
                 ReplayLog.Info("recorder: 攻击转播 " + _attackRelays + " 条 / 挥爪事件 " + _swings + " 条");
                 _writer.SetMeta("les", ReplayVersion.LesVersion);
@@ -822,6 +833,21 @@ namespace Together.Replay
 
         /// <summary>把引导阶段的消息存进缓存（无论当前是否在录），供 F6 片段复用。</summary>
         /// <summary>把内存里的引导包缓存原样写进文件（半路开录时用）。</summary>
+        /// <summary>这条记录是不是引导消息（开局公告 / 世界种子）。</summary>
+        static bool IsBootstrapMsg(byte[] data, int length)
+        {
+            if (data == null || length <= 0) return false;
+            byte id = data[0];
+            return id == (byte)NetmsgId.StartGameAnnouncement || id == (byte)NetmsgId.GenerateWorld_SeedAnnounce;
+        }
+
+        /// <summary>只有"真的写进了当前文件（或复制进来）"才置位，避免录像头骗人。</summary>
+        static void NoteBootstrapRecord(byte[] data, int length)
+        {
+            if (_sawStartGame) return;
+            if (IsBootstrapMsg(data, length)) _sawStartGame = true;
+        }
+
         static int WriteCachedBootstrap(ReplayWriter writer)
         {
             if (writer == null || _bootstrapCache.Count == 0) return 0;
@@ -831,6 +857,7 @@ namespace Together.Replay
                 foreach (var r in _bootstrapCache)
                 {
                     writer.Write(r.Kind, r.Pov, r.Tick, r.Dt, r.Data, r.Data.Length);
+                    NoteBootstrapRecord(r.Data, r.Data.Length);
                     n++;
                 }
             }
@@ -858,7 +885,7 @@ namespace Together.Replay
             int n = 0;
             foreach (var r in _bootstrapCache)
             {
-                try { writer.Write(r.Kind, r.Pov, r.Tick, r.Dt, r.Data, r.Data.Length); n++; }
+                try { writer.Write(r.Kind, r.Pov, r.Tick, r.Dt, r.Data, r.Data.Length); NoteBootstrapRecord(r.Data, r.Data.Length); n++; }
                 catch { }
             }
             _bootstrapFlushed = true;
@@ -1203,14 +1230,11 @@ namespace Together.Replay
 
             if (msgId == (byte)NetmsgId.StartGameAnnouncement)
             {
+                // 注意：这里不置 _sawStartGame —— 要等 WriteToFile 真的把它写进去，
+                // 否则"队列里看到过"和"文件里有"会被混为一谈（HANDOVER 6.1）。
                 if (!_sawStartGame)
                 {
-                    _sawStartGame = true;
-                    try
-                    {
-                        _writer?.SetMeta("bootstrap", "1");
-                        _writer?.SetMeta("gamestart_ms", _writer.DurationMs.ToString());   // 回放时跳过大厅等待
-                    }
+                    try { _writer?.SetMeta("gamestart_ms", _writer.DurationMs.ToString()); }   // 回放时跳过大厅等待
                     catch { }
                 }
             }
@@ -1368,6 +1392,7 @@ namespace Together.Replay
                 _writer.Write(kind, pov, Net.ServerTick, dt, data, length);
                 Ring.Add(kind, pov, Net.ServerTick, dt, data, length);
                 _approxBytes += length + 8;
+                NoteBootstrapRecord(data, length);   // 落盘了才算这份录像有引导
             }
             catch (Exception e)
             {

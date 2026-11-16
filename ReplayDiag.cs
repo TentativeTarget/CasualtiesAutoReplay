@@ -203,6 +203,44 @@ namespace Together.Replay
 
         static string Flag(string name, object v) => name + "=" + (v ?? "?");
 
+        static Type _preRunType;
+        static bool _preRunFound;
+
+        /// <summary>
+        /// 主菜单的 PreRunScript 是否在场。
+        /// 5.5.2 的开局公告只走这个对象（ClientReceiver_StartGameAnnouncement 里的
+        /// "if (PreRunScript.instance != null) ... WaitLoad()"），没它就不会加载场景。
+        /// </summary>
+        public static bool PreRunScriptExists()
+        {
+            try
+            {
+                if (!_preRunFound)
+                {
+                    _preRunType = AccessTools.TypeByName("PreRunScript");
+                    _preRunFound = _preRunType != null;
+                }
+                if (_preRunType == null) return false;
+
+                var f = _preRunType.GetField("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (f != null) return f.GetValue(null) != null;
+                var p = _preRunType.GetProperty("instance", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+                if (p != null) return p.GetValue(null) != null;
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>场景 / PreRunScript / 世界的即时快照，用于判断引导消息进客户端之后发生了什么。</summary>
+        public static string SceneState()
+        {
+            string scene = "-";
+            try { scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name; } catch { }
+            bool world = false;
+            try { var w = WorldGeneration.world; world = w != null && w.worldExists; } catch { }
+            return "scene=" + scene + " prerun=" + PreRunScriptExists() + " world=" + world;
+        }
+
         public static void Tick()
         {
             if (!ReplayPump.IsActive) return;
@@ -274,6 +312,7 @@ namespace Together.Replay
 
                 ReplayLog.Info("diag: chunks=" + ReplayPump.DispatchedChunks + " les=" + ReplayPump.DispatchedLes + sky + extra + " " + world
                     + " " + Flag("srvGen", sg) + " " + Flag("startingGame", startGame)
+                    + " prerun=" + PreRunScriptExists()
                     + " timeScale=" + Time.timeScale
                     + " netRunning=" + Net.IsRunning
                     + " pos=" + ReplayPump.PositionMs / 1000 + "s");

@@ -119,8 +119,26 @@ namespace Together.Replay
             if (_reader.Meta.TryGetValue("biome", out var biomeStr) && int.TryParse(biomeStr, out var biomeVal))
                 ReplayMode.SetRecordedBiome(biomeVal);
 
-            if (_reader.Meta.TryGetValue("bootstrap", out var bs) && bs == "0")
-                ReplayLog.Warn("replay: 这个录像没有世界引导（录制时已经在世界里了），播放会停在主菜单");
+            // meta 的 bootstrap 字段历史上会骗人（录制端的静态标志没清），所以按内容判定。
+            HasBootstrapRecord = ScanBootstrapRecord();
+            if (!HasBootstrapRecord)
+            {
+                bool inWorldNow = false;
+                try { var w0 = WorldGeneration.world; inWorldNow = w0 != null && w0.worldExists; } catch { }
+
+                if (!inWorldNow)
+                {
+                    ReplayLog.Error("replay: 这个录像里没有世界引导（录制时没抓到「开局公告/世界种子」），"
+                        + "从主菜单播不了 —— 客户端没有世界可建，只会在空场景里空转。"
+                        + "请先进入一局游戏再播，或换一份带引导的录像。");
+                    try { ReplayRecordUi.SetStatus("这个录像没有世界引导，无法从主菜单播放"); } catch { }
+                    try { _reader.Dispose(); } catch { }
+                    _reader = null;
+                    Path = "";
+                    return false;
+                }
+                ReplayLog.Warn("replay: 这个录像没有世界引导，只能用当前世界里已有的地形/实体播放（画面可能与录像不一致）");
+            }
             _reader.Restart();
             _hasPending = false;
             _clockTicks = 0;
@@ -269,6 +287,31 @@ namespace Together.Replay
         {
             string v;
             return _reader.Meta.TryGetValue(key, out v) ? v : null;
+        }
+
+        /// <summary>这份录像里是否真的存在世界引导记录（开局公告 / 世界种子）。meta 不可信，按内容判定。</summary>
+        public static bool HasBootstrapRecord { get; private set; }
+
+        static bool ScanBootstrapRecord()
+        {
+            if (_reader == null) return false;
+            try
+            {
+                _reader.Restart();
+                int budget = 200000;   // 引导一定在最前面；扫不到就是真没有
+                while (budget-- > 0 && _reader.TryRead(out var r))
+                {
+                    if (r.TimeMs > 30000) return false;   // 开局公告/种子不会晚于 30 秒，别白扫整份文件
+                    if (r.Kind != ReplayKind.Broadcast && r.Kind != ReplayKind.Unicast) continue;
+                    if (r.Length <= 0 || r.Data == null) continue;
+                    byte id = r.Data[0];
+                    if (id == (byte)NetmsgId.StartGameAnnouncement || id == (byte)NetmsgId.GenerateWorld_SeedAnnounce)
+                        return true;
+                }
+            }
+            catch { }
+            finally { try { _reader?.Restart(); } catch { } }
+            return false;
         }
 
         /// <summary>第一条"开局/种子公告"的时间（毫秒）；找不到返回 0。</summary>
@@ -1066,9 +1109,19 @@ namespace Together.Replay
                 }
             }
 
+            // 引导消息进客户端前后的现场快照（HANDOVER 6.1：确认 StartGame 到底有没有被客户端处理）
+            bool isBootstrapMsg = rec.Length > 0
+                && (rec.Data[0] == (byte)NetmsgId.StartGameAnnouncement || rec.Data[0] == (byte)NetmsgId.GenerateWorld_SeedAnnounce);
+            if (isBootstrapMsg)
+                ReplayLog.Info("replay: 投递引导 msgid=" + rec.Data[0] + " -> " + ReplayDiag.SceneState());
+
             try
             {
                 ReplayBridge.InvokeClientMessage((knetid)(ushort)Net.SERVER_CLIENTID, new NetDataReader(rec.Data));
+
+                if (isBootstrapMsg)
+                    ReplayLog.Info("replay: 引导已交给客户端 msgid=" + rec.Data[0] + " -> " + ReplayDiag.SceneState()
+                        + "（场景加载是协程，2 秒后的 diag 行才是结果）");
 
                 if (_justAnnounced)
                 {

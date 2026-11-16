@@ -97,7 +97,7 @@ namespace Together.Replay
                     info.DurationMs = BitConverter.ToUInt32(h, 28);
                     int ml = BitConverter.ToUInt16(h, 32);
                     string meta = System.Text.Encoding.UTF8.GetString(h, 34, Math.Min(ml, 460));
-                    info.HasBootstrap = !meta.Contains("bootstrap=0");
+                    info.HasBootstrap = HasBootstrapMeta(meta);
                     info.IsClip = meta.Contains("mode=clip");
                     info.SeedHex = Meta(meta, "seedhex");
                     info.Rng0 = Meta(meta, "rng0");
@@ -164,6 +164,19 @@ namespace Together.Replay
             "猩红长阶",          // 11 layertitle11
             "某个实验室",        // 12 layertitle12（地球 · 某个实验室...）
         };
+
+        /// <summary>
+        /// 引导是否存在：新文件看 bootrec（录制时按内容写的），老文件看能不能证明抓到过引导。
+        /// 以前只看 bootstrap=0，而老版本录制端会把 bootstrap 写成 1 却一条引导都没写，
+        /// 卡片因此显示"完整"，点了才发现播不了（HANDOVER 6.1）。
+        /// </summary>
+        static bool HasBootstrapMeta(string meta)
+        {
+            if (meta.Contains("bootstrap=0")) return false;
+            if (meta.Contains("bootrec=1")) return true;
+            if (meta.Contains("mode=clip")) return true;   // 片段导出时总是先写引导
+            return meta.Contains("gamestart_ms=") || meta.Contains("seedhex=");
+        }
 
         static string Meta(string meta, string key)
         {
