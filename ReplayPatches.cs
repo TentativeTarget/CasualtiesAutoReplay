@@ -954,16 +954,17 @@ namespace Together.Replay
         }
 
         /// <summary>
-        /// `PlushScript.Squeak()` = 玩偶被撞响。
+        /// 玩偶的吱吱声有两个来源，必须分开对待：
         ///
-        /// 玩偶是**同步的物品实体**，回放客户端里它照样有刚体和碰撞，
-        /// `OnCollisionEnter2D`（relativeVelocity > 2）会自己再响一次。
-        /// 所以这个声音**不能录**——录了就是双响。原版行为本来就是"物理自己算"。
+        ///   ① `PlushScript.OnCollisionEnter2D` → `Squeak()`   ← 本地物理，回放端自己会响，**不录**
+        ///   ② `Item.SetupItems` 里注册的"使用"委托 → `Squeak()` ← 玩家操作，回放里没人按，**必须录**
+        ///
+        /// 所以标记只打在 ①（碰撞）上，不能打在 `Squeak` 本身——否则玩家捏玩偶那一声就丢了。
         /// </summary>
         [HarmonyPatch]
         internal static class PlushSqueakFilter
         {
-            static MethodBase TargetMethod() => AccessTools.Method(typeof(PlushScript), "Squeak");
+            static MethodBase TargetMethod() => AccessTools.Method(typeof(PlushScript), "OnCollisionEnter2D");
             static bool Prepare() => TargetMethod() != null;
 
             static void Prefix() { SoundRecordPatch.InLocalPhysicsSound = true; }
