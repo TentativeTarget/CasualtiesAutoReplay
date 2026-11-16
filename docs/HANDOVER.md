@@ -163,31 +163,40 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 - `MeleeAttack` 协程在幽灵守卫上会半路断，现改为 `MeleeAnim` + 手动 `tesla.Play()` + `ReplayTeslaTimer`（0.6s 后清空）
 - **尚未实证**：特效是否出现且会消失
 
-### 6.4 音乐
+### 6.4 音乐（整段没声音的根因已找到，待实机确认）
 
-**背景音乐**：录 `MusicManager.PlaySong(AudioClip)` → 回放按 clip 名找
-`Resources.FindObjectsOfTypeAll<AudioClip>()` 再 `PlaySong`；找不到打 `replay: 找不到音乐 <name>`。
-不录 `StopSong`（录到一次"停"，回放里音乐就永久没了）。**尚未实证**。
+现象：回放里**一首音乐都没有**（不是只有蜘蛛战斗音乐）。
 
-**战斗音乐（已按 IL 核对并重写，`83ca013`）**：原版是**状态驱动**，不是"播一个音效"：
+**根因 1：回放里世界不是"生成"出来的，原版的开场动作不会跑。**
+`WorldGeneration.FinishWorldGeneration` 协程里会调 `MusicManager.PlayLayerSong()`——
+这是正常一局开局立刻有音乐的原因。回放是把录制消息喂回客户端建起的世界，
+这条协程不会执行，于是回放从静默开始；而 `MusicManager.Update` 只有在
+`timeSinceFinishedPlaying > trackInterval` 时才换下一首，所以几十秒内一声都没有。
 
-```
-SpiderHandler.PlayThreatMusic()      只写 PlayerCamera.currentThreatTheme = droneToPlay
-                                     （只有 Lab 场景才顺手把 threatMusicTime 设 5）
-MusicManager.Update                  每帧：threatMusicTime > 0 才拉威胁 drone
-PlayerCamera.HandleVariables         每帧：threatMusicTime -= deltaTime
-Body.HandlePeriodicChecks            被生物咬时 threatMusicTime = 8（旁路）
-```
+**根因 2：录像里几乎没有 PlaySong 事件。**
+七份录像（含 2026-11-17 00:59 那份新录的）解包后 Fx 子类型只有 1/2/3/5/7/8/11，
+**0 条 14（PlaySong）、0 条 13（战斗音乐）**。一首歌能放好几分钟，47~159 秒的录制窗口里
+常常一次换歌都没赶上 —— 光靠"录事件"永远补不出开局那首。
 
-所以"回放时调一次 `PlayThreatMusic`"**永远不会出声** —— 没人设 `threatMusicTime`。
-之前偶尔能听到，是现场真的又咬了一口（走 8 秒旁路），属于碰运气。
-再加上模组给 `PlayThreatMusic` 挂了 `KM.DistanceCheck(Camera.main, 蜘蛛)` 的 prefix，
-回放相机常不在蜘蛛旁边，连主题都设不进去。
+**改法（`83ca013` + 音频状态快照）**：
 
-现在的做法：录制时把主题号（`droneToPlay`）一起记下来（payload 9→13 字节），
-回放直接写 `PlayerCamera.main.currentThreatTheme` + `threatMusicTime = 5`。
-不依赖蜘蛛对象是否已同步、也不依赖相机位置；老文件（9 字节）走"就近找 30m 内蜘蛛"的兜底。
-日志：`replay: 战斗音乐 theme=N`。**尚未实证**（要实机打一场蜘蛛看日志 + 听声音）。
+1. **录音乐状态**：开录时、以及世界就绪时各写一条 `Fx[15] = [float 播放位置][float 静默计时][clip 名]`
+   （`ReplayRecorder.MusicState` → `ReplayMusic.Capture`）。这样"开录那一刻正在放的那首"能还原。
+2. **回放按状态恢复**：`ReplayMusic.Want/TickApply` 记住目标曲目，每帧检查——换场景
+   （`Begin`/`Seek` 都会重载）把 `MusicManager` 重建了也能补放一次，日志 `replay: 音乐恢复 <clip>@<s>`。
+3. **兜底补播**：世界就绪后如果录像里根本没有音乐状态、而且一点声音都没有，
+   就按原版 `FinishWorldGeneration` 的行为调一次 `MusicManager.PlayLayerSong()`
+   （按当前 biome 随机挑一首），日志 `replay: 补播背景音乐`。
+4. `PlaySong` 事件照旧录（`Fx[14]`），换歌时同时更新目标曲目。
+5. 不录 `StopSong` —— 录到一次"停"，回放里音乐就永久没了。
+
+**战斗音乐是另一条链路**（`83ca013`）：原版 `SpiderHandler.PlayThreatMusic()` **不发声**，
+它只写 `PlayerCamera.currentThreatTheme`；`MusicManager.Update` 每帧看
+`threatMusicTime > 0` 才拉威胁 drone，而 `threatMusicTime` 由 `PlayerCamera.HandleVariables`
+每帧 -1 递减。现在录制时把主题号一起记下（payload 9→13 字节），回放直接写
+`currentThreatTheme` + `threatMusicTime = 5`，不再依赖"就近找蜘蛛"和模组的相机距离前缀。
+
+**待实证**：需要一局有音乐的录像（或至少世界就绪后听到 `补播背景音乐`）来确认。
 
 ### 6.5 中段开录 = 整段复制（用户同意先挂着）
 
@@ -243,6 +252,10 @@ Body.HandlePeriodicChecks            被生物咬时 threatMusicTime = 8（旁�
     要么世界里播，要么走 6.5 的父子段串联
 11. **`PlayThreatMusic` 不是"播战斗音乐"**，它只设主题；出声要 `threatMusicTime > 0`（见 6.4）。
     凡是"只在某个事件里被调用一次"的原版方法，先读 IL 确认它到底改了什么状态
+12. **回放里游戏自己的时序协程不会跑**（`FinishWorldGeneration`、各种 `StartCoroutine` 开场动作）。
+    凡是"一局开始/世界就绪时会做一次"的原版行为，回放都得自己补一遍——音乐就是这么丢的（见 6.4）
+13. 读原版行为最快的办法不是猜，是用 `tools/IlDump`（Mono.Cecil）直接看 IL：
+    `IlDump Assembly-CSharp.dll m:Type.Method` / `who:字段` / `call:方法` / `fld:Type.字段`
 
 ---
 

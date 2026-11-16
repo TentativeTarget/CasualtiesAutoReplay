@@ -89,6 +89,29 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
+        /// <summary>
+        /// 记一条"当前音乐状态"：payload = [15][float 播放位置][float 静默计时][clip 名]。
+        ///
+        /// 为什么需要：原版只有在 timeSinceFinishedPlaying &gt; trackInterval 时才换下一首，
+        /// 所以录像开始/关键帧那一刻"正在放的那首歌"如果不记下来，回放里就要从静默开始等
+        /// 完整一个间隔才可能出声——表现出来就是"整段回放一点音乐都没有"。
+        /// </summary>
+        public static void MusicState()
+        {
+            if (_writer == null) return;
+            string name; float time, sinceFinished;
+            if (!ReplayMusic.Capture(out name, out time, out sinceFinished)) return;
+
+            var nb = System.Text.Encoding.UTF8.GetBytes(name ?? "");
+            if (nb.Length > 120) return;
+            var payload = new byte[9 + nb.Length];
+            payload[0] = 15;
+            BitConverter.GetBytes(time).CopyTo(payload, 1);
+            BitConverter.GetBytes(sinceFinished).CopyTo(payload, 5);
+            Array.Copy(nb, 0, payload, 9, nb.Length);
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
         /// <summary>记一条背景音乐变化：payload = [14][clip 名 或 "stop"]。</summary>
         public static void Music(string what)
         {

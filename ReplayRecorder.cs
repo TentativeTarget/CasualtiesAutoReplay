@@ -270,6 +270,7 @@ namespace Together.Replay
                 + " phantom=" + (ReplayPlugin.EnablePhantom != null && ReplayPlugin.EnablePhantom.Value)
                 + " writes=" + !(ReplayPlugin.NullMode != null && ReplayPlugin.NullMode.Value));
             Marker("record-start pov=omniscient");
+            MusicState();   // 开录那一刻在放什么歌（否则回放要从静默开始等一个完整间隔）
             ReplayLog.Info("recorder: ===== 开始录制 frame=" + Time.frameCount + " t=" + Time.realtimeSinceStartup.ToString("0.00") + " =====");
             ReplayLog.Info("recorder: 开始录制 -> " + _path + " (phantom id=" + PhantomId + ")");
             return true;
@@ -761,6 +762,7 @@ namespace Together.Replay
             if (!_biomeRecorded)
             {
                 _biomeRecorded = true;
+                MusicState();   // 世界就绪，音乐也开始了——再记一份当前状态
                 try
                 {
                     int b = WorldGeneration.world.biomeDepth;

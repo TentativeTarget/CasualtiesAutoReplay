@@ -357,6 +357,7 @@ namespace Together.Replay
             try { _reader?.Dispose(); } catch { }
             _reader = null;
             _hasPending = false;
+            try { ReplayMusic.Clear(); } catch { }
             ReplayLog.Info("replay: 停止 (" + reason + ")");
         }
 
@@ -451,6 +452,21 @@ namespace Together.Replay
         {
             ReplayTracer.Tick();
             SyncGunPose();     // 过期弹道线即使回放结束也要清掉
+
+            // 音乐会因为换场景（Begin/Seek 重载）被重建，所以每帧检查"该放的那首还在不在"；
+            // 世界就绪后如果还是静默，就按原版 FinishWorldGeneration 的行为补一首。
+            if (IsActive)
+            {
+                try { ReplayMusic.TickApply(); } catch { }
+                try
+                {
+                    var w0 = WorldGeneration.world;
+                    if (w0 != null && w0.worldExists
+                        && string.Equals(SceneManager.GetActiveScene().name, "SampleScene", StringComparison.OrdinalIgnoreCase))
+                        ReplayMusic.EnsurePlaying();
+                }
+                catch { }
+            }
 
             if (!IsActive || _reader == null) return;
             EnsurePlayerId();
@@ -601,7 +617,7 @@ namespace Together.Replay
         static int _seekStartMs;
         static int _seekDispatched;
         static float _lastSwingPlay = -1f;
-        static int _threatLogs, _threatMissLogs;
+        static int _threatLogs, _threatMissLogs, _musicStateLogs;
         static int _fxCount;
         static int _fxMissLogs;
         static readonly System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<GameObject, float>> _fxList =
@@ -716,12 +732,32 @@ namespace Together.Replay
                                         {
                                             if (c != null && c.name == what) { clip = c; break; }
                                         }
-                                        if (clip != null) mm.PlaySong(clip);
+                                        if (clip != null)
+                                        {
+                                            mm.PlaySong(clip);
+                                            ReplayMusic.Want(what, 0f);   // 换歌后继续跟住，换场景也能补放
+                                        }
                                         else ReplayLog.Warn("replay: 找不到音乐 " + what);
                                     }
                                 }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 音乐重放失败 " + e.Message); }
+                            return;
+                        }
+
+                        // 首字节 15 = 音乐状态快照（播放位置 + 静默计时 + clip 名）
+                        if (rec.Length > 9 && rec.Data[0] == 15)
+                        {
+                            try
+                            {
+                                float at = BitConverter.ToSingle(rec.Data, 1);
+                                string nm = System.Text.Encoding.UTF8.GetString(rec.Data, 9, rec.Length - 9);
+                                ReplayMusic.Want(nm, at);
+                                ReplayMusic.TickApply();
+                                if (_musicStateLogs++ < 6)
+                                    ReplayLog.Info("replay: 音乐状态 " + (string.IsNullOrEmpty(nm) ? "（静默）" : nm + " @" + at.ToString("0.0") + "s"));
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 音乐状态应用失败 " + e.Message); }
                             return;
                         }
 
