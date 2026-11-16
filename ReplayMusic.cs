@@ -161,6 +161,30 @@ namespace Together.Replay
         static int _threatApplies;
 
         /// <summary>
+        /// 照抄录制时的"威胁音乐状态"（Fx[16] 采样）。这条比按事件猜可靠：
+        /// 谁触发的（守卫开枪 / 蜘蛛咬人 / 水晶怪 / 地震）都不重要，只看结果。
+        /// </summary>
+        public static void ApplyThreatState(float time, int theme)
+        {
+            try
+            {
+                var cam = PlayerCamera.main;
+                if (cam == null) return;
+
+                int count = 0;
+                try { var mm = MM; if (mm != null && mm.droneTracks != null) count = mm.droneTracks.Count; } catch { }
+                if (theme < 0) theme = 0;
+                if (count > 0 && theme >= count) theme = count - 1;
+
+                cam.currentThreatTheme = theme;
+                cam.threatMusicTime = time;
+                if (time > 0f && _threatApplies++ < 8)
+                    ReplayLog.Info("replay: 威胁音乐(状态) theme=" + theme + " 余 " + time.ToString("0.0") + "s");
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// 起一段"威胁音乐"（战斗 drone）。原版就是这么干的：
         /// MusicManager.Update 每帧看 <c>PlayerCamera.threatMusicTime &gt; 0</c>，
         /// 然后把 <c>droneOn[currentThreatTheme]</c> 拉起来，threatMusicTime 自己每帧 -1。

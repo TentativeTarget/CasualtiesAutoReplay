@@ -758,6 +758,19 @@ namespace Together.Replay
                             return;
                         }
 
+                        // 首字节 16 = 威胁音乐状态采样（倒计时 + 主题号）
+                        if (rec.Length >= 9 && rec.Data[0] == 16)
+                        {
+                            try
+                            {
+                                float tl = BitConverter.ToSingle(rec.Data, 1);
+                                int th = BitConverter.ToInt32(rec.Data, 5);
+                                ReplayMusic.ApplyThreatState(tl, th);
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 威胁音乐状态应用失败 " + e.Message); }
+                            return;
+                        }
+
                         // 首字节 15 = 音乐状态快照（播放位置 + 静默计时 + clip 名）
                         if (rec.Length > 9 && rec.Data[0] == 15)
                         {

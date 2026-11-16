@@ -112,6 +112,25 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
+        /// <summary>
+        /// 记一条"威胁音乐状态"：payload = [16][float 倒计时][int 主题号]。
+        ///
+        /// 为什么要有这条：音乐/无人机（drone）不是"播一下"的输出，而是
+        /// MusicManager.Update 每帧按状态算音量。光挂事件永远挂不全——
+        /// 守卫开枪会刷 threatMusicTime，蜘蛛咬人会、水晶怪会、地震会……
+        /// 与其一个一个补触发点，不如把这个**客户端本地状态**按 5Hz 采样下来，
+        /// 回放时照抄。这样"谁开的枪"根本不重要。
+        /// </summary>
+        public static void ThreatState(float time, int theme)
+        {
+            if (_writer == null) return;
+            var payload = new byte[9];
+            payload[0] = 16;
+            BitConverter.GetBytes(time).CopyTo(payload, 1);
+            BitConverter.GetBytes(theme).CopyTo(payload, 5);
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
         /// <summary>记一条背景音乐变化：payload = [14][clip 名 或 "stop"]。</summary>
         public static void Music(string what)
         {

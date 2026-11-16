@@ -124,6 +124,11 @@ namespace Together.Replay
         static bool _sawStartGame;
         static byte[] _scratch = new byte[ReplayConst.MaxRecord];
 
+        // 威胁音乐状态采样（5Hz，只在变化够大/主题变了/刚掉到 0 时写一条）
+        static float _threatSampleAt;
+        static float _threatLastSent = -1f;
+        static int _threatLastTheme = int.MinValue;
+
         public static bool Start()
         {
             if (_writer != null) return true;
@@ -173,6 +178,9 @@ namespace Together.Replay
             _rngCaptured = false;
             _seedCaptured = false;
             _biomeRecorded = false;   // 同一个道理：否则第二份文件的头里永远没有 biome，层名会错
+            _threatSampleAt = 0f;
+            _threatLastSent = -1f;
+            _threatLastTheme = int.MinValue;
 
             // 新一次录制 = 新的一局：引导包缓存必须是这一局的。
             // 不清零会导致第二次开局仍在用上一局的种子/开局公告（甚至直接判定"已有引导"而不缓存）。
@@ -639,6 +647,34 @@ namespace Together.Replay
             _stepTotalMs = 0; _stepMaxMs = 0; _stepCalls = 0;
         }
 
+        /// <summary>
+        /// 5Hz 采一次"威胁音乐状态"。客户端本地的倒计时，网络里没有，
+        /// 所以只能从本机抓；回放端照抄就能还原战斗音乐，不用管是谁触发的。
+        /// </summary>
+        static void SampleThreatState()
+        {
+            try
+            {
+                float now = Time.unscaledTime;
+                if (now < _threatSampleAt) return;
+                _threatSampleAt = now + 0.2f;
+
+                var cam = PlayerCamera.main;
+                if (cam == null) return;
+                float t = cam.threatMusicTime;
+                int theme = cam.currentThreatTheme;
+
+                bool wentSilent = t <= 0f && _threatLastSent > 0f;
+                bool changed = t > 0f && (Mathf.Abs(t - _threatLastSent) >= 0.4f || theme != _threatLastTheme);
+                if (!wentSilent && !changed) return;
+
+                _threatLastSent = t;
+                _threatLastTheme = theme;
+                ThreatState(t, theme);
+            }
+            catch { }
+        }
+
         public static void Tick()
         {
             if (_writer == null) return;
@@ -659,6 +695,7 @@ namespace Together.Replay
                 catch { }
             }
 
+            SampleThreatState();
             PerfReport();
             TryAttachPhantom();
             SyncPhantomBody();
