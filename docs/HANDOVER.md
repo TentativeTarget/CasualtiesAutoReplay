@@ -426,7 +426,7 @@ PlayerCamera.HandleVariables: 每帧  threatMusicTime -= deltaTime
 ## 8. 快速自检
 
 ```
-[ ] 日志有 "Casualties: Replay 0.2.0 loaded"
+[ ] 日志有 "Casualties: Replay 0.2.1 loaded"
 [ ] patch: installed= 含 talker-talk / guard-melee / threat-music / music-play / chat-log-filter
 [ ] 没有 "patch xxx failed" / "IL Compile Error"
 [ ] 开一局 → recorder: 开始录制
