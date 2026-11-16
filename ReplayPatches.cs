@@ -1408,19 +1408,6 @@ namespace Together.Replay
 
             static bool Prefix(MethodBase __originalMethod, object[] __args, ref bool __result)
             {
-                // 我们的面板开着时，屏蔽游戏的按键（ESC 由我们自己的 IMGUI 处理）
-                if (ReplayPlugin.UiOpen)
-                {
-                    if (__args != null && __args.Length == 1 && __args[0] is KeyCode uk)
-                    {
-                        int uc = (int)uk;
-                        if (uc >= (int)KeyCode.F1 && uc <= (int)KeyCode.F12) return true;
-                        if (ReplayKeys.IsOurKey(uk)) return true;
-                    }
-                    __result = false;
-                    return false;
-                }
-
                 if (!ReplayPlugin.InputBlocked) return true;
 
                 if (__args != null && __args.Length == 1 && __args[0] is KeyCode kc)

@@ -117,16 +117,6 @@ namespace Together.Replay
         {
             if (!Visible) return;
 
-            // ESC 关闭（走 IMGUI 事件：Input 已经被我们自己屏蔽了）
-            var ev = Event.current;
-            if (ev != null && ev.type == EventType.KeyDown && ev.keyCode == KeyCode.Escape)
-            {
-                ev.Use();
-                Visible = false;
-                ReplaySfx.Close();
-                return;
-            }
-
             // 压到最上层：Together 自己的 IMGUI 比我们晚画，会盖在我们遮罩之上
             int oldDepth = GUI.depth;
             GUI.depth = -5000;
