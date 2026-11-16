@@ -99,26 +99,6 @@ namespace Together.Replay
                 return false;
             }
 
-            Path = path;
-            StartedAtRealtime = Time.realtimeSinceStartup;
-            DispatchedChunks = 0; DispatchedLes = 0; DispatchedBroadcast = 0;
-            if (_reader.Meta.TryGetValue("sky", out var skyHex) && skyHex != "none" && skyHex.Length == 6)
-            {
-                try
-                {
-                    var col = new Color(
-                        Convert.ToInt32(skyHex.Substring(0, 2), 16) / 255f,
-                        Convert.ToInt32(skyHex.Substring(2, 2), 16) / 255f,
-                        Convert.ToInt32(skyHex.Substring(4, 2), 16) / 255f, 1f);
-                    float rain = 0f;
-                    if (_reader.Meta.TryGetValue("rain", out var rs)) float.TryParse(rs, out rain);
-                    ReplayMode.SetRecordedSky(col, rain);
-                }
-                catch { }
-            }
-            if (_reader.Meta.TryGetValue("biome", out var biomeStr) && int.TryParse(biomeStr, out var biomeVal))
-                ReplayMode.SetRecordedBiome(biomeVal);
-
             // meta 的 bootstrap 字段历史上会骗人（录制端的静态标志没清），所以按内容判定。
             HasBootstrapRecord = ScanBootstrapRecord();
             if (!HasBootstrapRecord)
@@ -139,6 +119,27 @@ namespace Together.Replay
                 }
                 ReplayLog.Warn("replay: 这个录像没有世界引导，只能用当前世界里已有的地形/实体播放（画面可能与录像不一致）");
             }
+
+            Path = path;
+            StartedAtRealtime = Time.realtimeSinceStartup;
+            DispatchedChunks = 0; DispatchedLes = 0; DispatchedBroadcast = 0;
+            if (_reader.Meta.TryGetValue("sky", out var skyHex) && skyHex != "none" && skyHex.Length == 6)
+            {
+                try
+                {
+                    var col = new Color(
+                        Convert.ToInt32(skyHex.Substring(0, 2), 16) / 255f,
+                        Convert.ToInt32(skyHex.Substring(2, 2), 16) / 255f,
+                        Convert.ToInt32(skyHex.Substring(4, 2), 16) / 255f, 1f);
+                    float rain = 0f;
+                    if (_reader.Meta.TryGetValue("rain", out var rs)) float.TryParse(rs, out rain);
+                    ReplayMode.SetRecordedSky(col, rain);
+                }
+                catch { }
+            }
+            if (_reader.Meta.TryGetValue("biome", out var biomeStr) && int.TryParse(biomeStr, out var biomeVal))
+                ReplayMode.SetRecordedBiome(biomeVal);
+
             _reader.Restart();
             _hasPending = false;
             _clockTicks = 0;
