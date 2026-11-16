@@ -185,7 +185,7 @@ Mod 的 `BodyViewParticles` 按"本地玩家所在区块"剔除粒子，回放�
 
 ### 20. 大文件读写要小心（开发过程坑）
 
-本仓库的 `ReplayRecorder.cs` / `ReplayPump.cs` 已经超过 50KB。
+本仓库的 `src/Recording/ReplayRecorder.cs` / `src/Core/ReplayPump.cs` 已经超过 50KB。
 编辑器/工具的"读全文 → 改 → 写回"流程如果读取有上限，会**静默截断文件**。
 → 改大文件只用**定点替换**，改完检查行数与结尾括号。
 

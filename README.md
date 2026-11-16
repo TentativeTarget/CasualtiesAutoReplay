@@ -5,7 +5,7 @@
 录制的是**服务器视角的完整网络消息流**，回放时用一个假的传输层把这股流灌回**原版客户端管线**——
 所以不需要为任何实体写序列化，也不要求游戏具备确定性。
 
-当前进度、已知问题、下一步计划见 [STATUS.md](STATUS.md)。
+当前进度、已知问题、下一步计划见 [docs/STATUS.md](docs/STATUS.md)。
 
 ---
 
@@ -19,7 +19,8 @@
 | 光箱（F8） | 录像卡片列表：层原画、角色立绘、层名、时长、玩家名/种族、种子，双击载入 |
 | 剪辑器（F9） | 底部时间线、关键帧刻度、拖拽跳转、标记点 （目前不怎么好用）|
 | 片段导出 | F6 打入点/出点，导出自包含的片段（带引导包，可独立回放） |
-| 特效还原 | 攻击动作、攻击特效、枪焰、碎屑、弹道、音效 |
+| 特效还原 | 攻击动作、攻击特效、枪焰、碎屑、弹道、音效（含 2D 全局音效） |
+| 音乐还原 | 背景曲、战斗 drone（按 `threatMusicTime` 状态采样）、击杀成就音效及其"暂停全部音乐"序列 |
 
 ---
 
@@ -27,7 +28,7 @@
 
 1. 游戏本体（1.0.2）+ BepInEx 5.4.23.5
 2. 安装前置：Casualties: Together 5.5.2
-3. 把本插件放进plugings/Together目录（只要dll文件与ui文件在同一目录即可）
+3. 把本插件放进 plugins/Together 目录（dll 与 ui 素材放同一目录即可）
 
 ```
 BepInEx/plugins/Together/
@@ -53,8 +54,8 @@ BepInEx/plugins/Together/
 | **F1 / F2** | 后退 / 前进 10 秒 |
 | **F3** | 观战模式（照抄 Mod 自带 UI） |
 | **F4** | 自由相机 |
-| **F11** | 动画状态诊断 |
-| **F12** | 重载 `replay_ui` 贴图（Shift+F12 导出资源名） |
+| **F11** | 动画状态诊断（需 `[Debug] Diagnostics=true`） |
+| **F12** | 重载 `replay_ui` 贴图（Shift+F12 导出资源名，需 `Diagnostics=true`） |
 
 热键有两种改法，二选一即可：
 
@@ -99,8 +100,12 @@ LiteNetLib、K4os.LZ4、Unity 各模块）都是对游戏目录的纯文件引�
 | Recording | `InjectFakeClient` | true | 注入假客户端 id，录到"只发给其他客户端"的消息 |
 | Recording | `FakeClientId` | 250 | 假客户端 id（不要和真实玩家冲突） |
 | Recording | `OutputDir` | 空 | 录像目录，空则用 persistentDataPath |
+| Recording | `CaptureAllEffects` | true | 记录实例化特效与全部 `Animator.Play`（体积会涨） |
 | Replay | `BlockMoveInput` | true | 观看时屏蔽输入，防止操纵录像里的角色 |
 | Replay | `PovBinding` | false | 视角绑到录像玩家（实验性） |
+| Replay | `MusicFallback` | false | 录像里没音乐时是否补播一首（关=严格按原版） |
+| Replay | `AutoSpectator` | true | 进入世界后自动开无 HUD 观战 |
+| Debug | `Diagnostics` | false | 开启诊断探针与 dump（会写文件，平时保持关闭） |
 | Debug | `PatchDisable` | 空 | 逗号分隔的补丁名，跳过安装（诊断用） |
 
 ---
@@ -108,32 +113,57 @@ LiteNetLib、K4os.LZ4、Unity 各模块）都是对游戏目录的纯文件引�
 ## 6. 目录结构
 
 ```
-ReplayPlugin.cs        BepInEx 入口、配置、每帧调度
-ReplayRecorder.cs      录制端：消息流、快照、元数据
-ReplayRecorder.Shot.cs 录制端：弹道/音效/姿势等"本地事件"（partial）
-ReplayChunks.cs        全图地形快照（哈希增量 + 分帧发送）
-ReplayFormat.cs        .ctrp 读写、LZ4 分块、索引、关键帧
-ReplayPump.cs          回放端：时钟、投递、跳转、特效/声音重放
-ReplayTransport.cs     假传输层（把回放流伪装成网络）
-ReplayPeer.cs          幽灵观察者（LES 全知基线）
-ReplayBridge.cs        反射桥：访问 Mod 的 internal Net / LES
-ReplayPatches.cs       所有 Harmony 补丁（录制钩子 + 回放屏蔽）
-ReplayMode.cs          回放态的相机/观战/世界准备/清理
-ReplayLightboxUi.cs    F8 光箱
-ReplayEditorUi.cs      F9 剪辑器
-ReplayRecordUi.cs      F7 录制面板
-ReplayUiAssets.cs      UI 贴图加载（游戏素材 + replay_ui 覆盖）
-ReplayTracer.cs        弹道线绘制
-ReplayRecoil.cs        枪械后坐
-ReplayNineSlice.cs     九宫格绘制
-ReplayDiag.cs          诊断导出
+CasualtiesReplay.csproj
+README.md  CHANGELOG.md  LICENSE
+art_src/                    自制图标源文件（打包进 replay_ui/）
+docs/
+├── STATUS.md               进度、已验证结论、已知问题、下一步
+├── ARCHITECTURE.md         录制/回放原理
+├── FORMAT.md               .ctrp 二进制格式（记录类型/Fx 子类型/meta）
+└── PITFALLS.md             踩过的坑
+src/
+├── Core/                   入口、反射桥、回放推进、格式、音乐、相机
+│   ReplayPlugin.cs         BepInEx 入口、配置、每帧调度
+│   ReplayBridge.cs         反射桥：访问 Mod 的 internal Net / LES
+│   ReplayPump.cs           回放端：时钟、投递、跳转、特效/声音重放
+│   ReplayMode.cs           回放态：相机/观战/世界准备/清理
+│   ReplayFormat.cs         .ctrp 读写、LZ4 分块、索引、关键帧
+│   ReplayTransport.cs      假传输层（把回放流伪装成网络）
+│   ReplayPeer.cs           幽灵观察者（LES 全知基线）
+│   ReplayMusic.cs          音乐：背景曲 / 威胁 drone / 成就音效序列
+│   ReplayTracer.cs         弹道线绘制
+│   ReplayRecoil.cs         枪械后坐
+│   ReplayGuardPose.cs      守卫姿势
+│   ReplayTalker.cs         台词气泡
+│   ReplaySpectator.cs      观战 / 自由相机
+│   ReplayArtPack.cs        replay_ui → 单文件素材包
+│   ReplaySfx / ReplayTeslaTimer / ReplayRing / ReplayFileInfo
+├── Recording/              录制端
+│   ReplayRecorder.cs       消息流、快照、元数据
+│   ReplayRecorder.Shot.cs  弹道/音效/姿势等"本地事件"（partial）
+│   ReplayChunks.cs         全图地形快照（哈希增量 + 分帧发送）
+│   ReplayTalkerRecord.cs   台词补录
+├── Patches/                Harmony 与输入
+│   ReplayPatches.cs        所有补丁（录制钩子 + 回放屏蔽）
+│   ReplayDeathHook.cs      泛化死亡补录
+│   ReplayHotkeys / ReplayKeys / ReplayGameKeys   热键
+│   ReplayConsoleCommand.cs 控制台命令
+├── Ui/                     IMGUI 面板
+│   ReplayLightboxUi.cs     F8 光箱
+│   ReplayEditorUi.cs       F9 剪辑器
+│   ReplayRecordUi.cs       F7 录制面板
+│   ReplayUiAssets.cs       UI 贴图加载（游戏素材 + replay_ui 覆盖）
+│   ReplayNineSlice / ReplayFilmStrip / ReplaySettingsPage
+└── Diagnostics/            诊断探针（[Debug] Diagnostics=true 才启用）
+    ReplayDiag / ReplayNearProbe / ReplayNpcProbe / ReplayDeathProbe
+    ReplayDestroyProbe / ReplayGapProbe / ReplayDeepProfiler
 ```
 
 ---
 
 ## 7. 文档
 
-- [STATUS.md](STATUS.md) —— 进度、已验证结论、已知问题、下一步
+- [docs/STATUS.md](docs/STATUS.md) —— 进度、已验证结论、已知问题、下一步
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 录制/回放原理
 - [docs/FORMAT.md](docs/FORMAT.md) —— `.ctrp` 二进制格式（v7）
 - [docs/PITFALLS.md](docs/PITFALLS.md) —— **踩过的坑**（强烈建议先读）
