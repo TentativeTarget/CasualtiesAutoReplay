@@ -661,7 +661,9 @@ namespace Together.Replay
 
                                 if (mm != null)
                                 {
-                                    if (what == "stop") { mm.StopSong(); }
+                                    // 不处理 "stop"：背景音乐本来由场景自己接管，
+                                    // 录到一次"停"就把回放里的音乐永久停掉了。
+                                    if (what == "stop") { /* 忽略 */ }
                                     else
                                     {
                                         AudioClip clip = null;

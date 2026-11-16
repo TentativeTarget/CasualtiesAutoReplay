@@ -874,19 +874,7 @@ namespace Together.Replay
             }
         }
 
-        /// <summary>录制：停止背景音乐（无参数方法，不能声明 __0）。</summary>
-        [HarmonyPatch]
-        internal static class MusicStopRecord
-        {
-            static MethodBase TargetMethod() => AccessTools.Method(typeof(MusicManager), "StopSong");
-            static bool Prepare() => TargetMethod() != null;
 
-            static void Postfix()
-            {
-                if (!ReplayRecorder.IsRecording) return;
-                try { ReplayRecorder.Music("stop"); } catch { }
-            }
-        }
 
         /// <summary>录制：守卫近战（含 tesla 电击特效）。协程挂不住，所以只记开始位置，回放端重播同一段。</summary>
         [HarmonyPatch]
@@ -1539,7 +1527,6 @@ namespace Together.Replay
                 (typeof(GuardMeleeRecord), "guard-melee"),
                 (typeof(ThreatMusicRecord), "threat-music"),
                 (typeof(MusicPlayRecord), "music-play"),
-                (typeof(MusicStopRecord), "music-stop"),
                 (typeof(ChatLogFilterPatch), "chat-log-filter"),
                 (typeof(InstantiateNameProbe), "instantiate-name-probe"),
                 (typeof(GuardPublishProbePatch), "guard-publish-probe"),
