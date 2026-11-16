@@ -945,16 +945,26 @@ namespace Together.Replay
 
             static bool Prepare() => TargetMethod() != null;
 
-            static void Postfix(string clip, Vector2 pos)
+            static void Postfix(string __0, Vector2 __1, bool __2)
             {
-                Record(clip, pos);
+                Record(__0, __1, __2);
             }
 
-            internal static void Record(string clip, Vector2 pos)
+            static int _globalLogs;
+
+            internal static void Record(string clip, Vector2 pos, bool is2D)
             {
                 if (!ReplayRecorder.IsRecording) return;
                 try
                 {
+                    // 全局（2D）音效：坐标是占位值，绝不能拿它做距离过滤
+                    if (is2D)
+                    {
+                        if (_globalLogs++ < 12) ReplayLog.Info("sound: 全局音效 " + clip);
+                        ReplayRecorder.SoundEvent(clip, pos, true);
+                        return;
+                    }
+
                     var lp = ScavPlayer.LocalPlayer;
                     if (lp == null || lp.body == null) return;
                     // 精度优先：远处的声音也要录（原来 40m 会把远处的爆炸/枪声整段抹掉）
@@ -984,10 +994,10 @@ namespace Together.Replay
 
             static bool Prepare() => TargetMethod() != null;
 
-            static void Postfix(AudioClip clip, Vector2 pos)
+            static void Postfix(AudioClip __0, Vector2 __1, bool __2)
             {
-                if (clip == null) return;
-                SoundRecordPatch.Record(clip.name, pos);
+                if (__0 == null) return;
+                SoundRecordPatch.Record(__0.name, __1, __2);
             }
         }
 

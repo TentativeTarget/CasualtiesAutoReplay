@@ -617,7 +617,7 @@ namespace Together.Replay
         static int _seekStartMs;
         static int _seekDispatched;
         static float _lastSwingPlay = -1f;
-        static int _threatLogs, _threatMissLogs, _musicStateLogs, _animLogs, _animMiss;
+        static int _threatLogs, _threatMissLogs, _musicStateLogs, _animLogs, _animMiss, _globalSoundLogs;
 
         // 动画事件可能一秒几十条，FindObjectsOfType 每次都扫全场会卡；半秒缓存一次
         static Animator[] _animCache;
@@ -1121,6 +1121,21 @@ namespace Together.Replay
                                 }
                             }
                             catch { }
+                            return;
+                        }
+
+                        // 首字节 18 = 全局(2D)音效（成就/UI/剧情）——必须按 2D 播，否则听见不到
+                        if (rec.Length > 10 && rec.Data[0] == 18)
+                        {
+                            try
+                            {
+                                var gpos2 = new Vector2(BitConverter.ToSingle(rec.Data, 1),
+                                                        BitConverter.ToSingle(rec.Data, 5));
+                                string gclip = System.Text.Encoding.UTF8.GetString(rec.Data, 10, rec.Length - 10);
+                                Sound.Play(gclip, gpos2, true, false, null, 1f, 1f, false, false);
+                                if (_globalSoundLogs++ < 12) ReplayLog.Info("replay: 全局音效 " + gclip);
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 全局音效失败 " + e.Message); }
                             return;
                         }
 

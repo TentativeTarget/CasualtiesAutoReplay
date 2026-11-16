@@ -20,13 +20,33 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
-        /// <summary>记一条音效事件（名字 + 坐标），回放时重新播放。</summary>
-        public static void SoundEvent(string clip, Vector2 pos)
+        /// <summary>
+        /// 记一条音效事件（名字 + 坐标），回放时重新播放。
+        ///
+        /// <paramref name="is2D"/> 很重要：成就/UI/剧情这类**全局音效**是 2D 的（spatialBlend=0），
+        /// 它们带的坐标多半是 (0,0) 之类的占位值。以前一律当 3D 处理，于是
+        /// ①录制时被 120m 距离过滤掐掉；②回放时按 3D 播在 (0,0)，玩家在世界里根本听不见。
+        /// 2D 音效单独用 `Fx[18]` 记录，回放时按 2D 播。
+        /// </summary>
+        public static void SoundEvent(string clip, Vector2 pos, bool is2D = false)
         {
             if (_writer == null || string.IsNullOrEmpty(clip)) return;
             var nb = System.Text.Encoding.UTF8.GetBytes(clip);
+
+            if (is2D)
+            {
+                var p2 = new byte[nb.Length + 10];
+                p2[0] = 18;                        // 18 = 全局(2D)音效
+                BitConverter.GetBytes(pos.x).CopyTo(p2, 1);
+                BitConverter.GetBytes(pos.y).CopyTo(p2, 5);
+                p2[9] = 1;                          // 标志位，留给以后扩展
+                Array.Copy(nb, 0, p2, 10, nb.Length);
+                WriteToFile(ReplayKind.Fx, 0, p2, p2.Length);
+                return;
+            }
+
             var payload = new byte[nb.Length + 9];
-            payload[0] = 2;                       // 2 = 音效
+            payload[0] = 2;                         // 2 = 3D 音效
             Array.Copy(nb, 0, payload, 1, nb.Length);
             BitConverter.GetBytes(pos.x).CopyTo(payload, nb.Length + 1);
             BitConverter.GetBytes(pos.y).CopyTo(payload, nb.Length + 5);
