@@ -5,3 +5,4 @@ dist/
 .tools/
 *.psd
 .DS_Store
+docs/HANDOVER.md
