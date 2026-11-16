@@ -1010,10 +1010,9 @@ namespace Together.Replay
                         return;
                     }
 
-                    var lp = ScavPlayer.LocalPlayer;
-                    if (lp == null || lp.body == null) return;
-                    // 精度优先：远处的声音也要录（原来 40m 会把远处的爆炸/枪声整段抹掉）
-                    if (Vector2.Distance(pos, lp.body.transform.position) > 120f) return;
+                    // 原版行为严格遵守 + 精度优先：不做任何距离过滤。
+                    // 原版 Sound.Play 对全世界的声音都会播，衰减由 AudioSource 自己算；
+                    // 我们要是按距离丢，远处的爆炸/枪声就等于被我们"改没了"。
                     ReplayRecorder.SoundEvent(clip, pos, false, ignoreMixer, noReverb, volume, pitch);
                 }
                 catch { }
