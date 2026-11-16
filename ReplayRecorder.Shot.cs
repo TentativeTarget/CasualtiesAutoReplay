@@ -73,14 +73,19 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
-        /// <summary>记一条战斗音乐触发（蜘蛛进入战斗），回放时让最近的蜘蛛重放。</summary>
-        public static void ThreatMusic(Vector2 pos)
+        /// <summary>
+        /// 记一条战斗音乐（蜘蛛进入战斗）：位置 + 主题号。
+        /// 主题号就是原版写进 PlayerCamera.currentThreatTheme 的那个值；
+        /// 只记位置的话回放得先找一个近处的蜘蛛，蜘蛛没同步过来就彻底没声。
+        /// </summary>
+        public static void ThreatMusic(Vector2 pos, int theme)
         {
             if (_writer == null) return;
-            var payload = new byte[9];
+            var payload = new byte[13];
             payload[0] = 13;
             BitConverter.GetBytes(pos.x).CopyTo(payload, 1);
             BitConverter.GetBytes(pos.y).CopyTo(payload, 5);
+            BitConverter.GetBytes(theme).CopyTo(payload, 9);
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 

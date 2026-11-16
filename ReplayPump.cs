@@ -601,6 +601,7 @@ namespace Together.Replay
         static int _seekStartMs;
         static int _seekDispatched;
         static float _lastSwingPlay = -1f;
+        static int _threatLogs, _threatMissLogs;
         static int _fxCount;
         static int _fxMissLogs;
         static readonly System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<GameObject, float>> _fxList =
@@ -724,22 +725,58 @@ namespace Together.Replay
                             return;
                         }
 
-                        // 首字节 13 = 战斗音乐（蜘蛛位置）→ 让最近的蜘蛛重放
+                        // 首字节 13 = 战斗音乐（位置 + 主题号）
+                        //
+                        // 原版链路（Assembly-CSharp 1.0.2）：
+                        //   SpiderHandler.PlayThreatMusic() 只做两件事——把 droneToPlay 写进
+                        //   PlayerCamera.currentThreatTheme；Lab 场景时再把 threatMusicTime 设 5。
+                        //   真正出声的是 MusicManager.Update：它每帧读 threatMusicTime > 0 才把
+                        //   威胁 drone 拉起来，而 threatMusicTime 由 PlayerCamera.HandleVariables
+                        //   每帧 -1 递减。
+                        //
+                        // 所以只"重放 PlayThreatMusic"是不够的：threatMusicTime 没人设，回放里
+                        // 永远没声；而且模组给 PlayThreatMusic 挂了"相机离蜘蛛够近才放行"的
+                        // prefix，回放相机常不在蜘蛛旁边 → 连主题都设不进去。
+                        // 这里直接还原音乐状态，跟原版每帧读的东西对齐。
                         if (rec.Length >= 9 && rec.Data[0] == 13)
                         {
                             try
                             {
                                 var tpos = new Vector2(BitConverter.ToSingle(rec.Data, 1),
                                                        BitConverter.ToSingle(rec.Data, 5));
-                                SpiderHandler best = null;
-                                float bestD = 15f;
-                                foreach (var s in UnityEngine.Object.FindObjectsOfType<SpiderHandler>())
+
+                                // v0.2.1 起 payload 尾部多一个 int32 主题号；老文件没有，就找最近的蜘蛛问
+                                int theme = -1;
+                                if (rec.Length >= 13) theme = BitConverter.ToInt32(rec.Data, 9);
+
+                                float bestD = -1f;
+                                if (theme < 0)
                                 {
-                                    if (s == null) continue;
-                                    float d = Vector2.Distance(s.transform.position, tpos);
-                                    if (d < bestD) { bestD = d; best = s; }
+                                    bestD = 30f;
+                                    SpiderHandler near = null;
+                                    foreach (var s in UnityEngine.Object.FindObjectsOfType<SpiderHandler>())
+                                    {
+                                        if (s == null) continue;
+                                        float d = Vector2.Distance(s.transform.position, tpos);
+                                        if (d < bestD) { bestD = d; near = s; }
+                                    }
+                                    if (near != null) theme = near.droneToPlay;
                                 }
-                                if (best != null) best.Invoke("PlayThreatMusic", 0f);
+
+                                var cam = PlayerCamera.main;
+                                if (cam == null)
+                                {
+                                    if (_threatMissLogs++ < 5) ReplayLog.Warn("replay: 战斗音乐重放失败 —— PlayerCamera.main 不在场");
+                                }
+                                else
+                                {
+                                    if (theme <= 0) theme = 1;   // 老文件找不到蜘蛛时给个非零主题，别静默没声
+                                    cam.currentThreatTheme = theme;
+                                    cam.threatMusicTime = 5f;    // 与原版威胁窗口一致，之后每帧 -1 递减
+                                    if (_threatLogs++ < 8)
+                                        ReplayLog.Info("replay: 战斗音乐 theme=" + theme
+                                            + (bestD >= 0 ? "（老格式，就近找蜘蛛 " + bestD.ToString("0.0") + "m）" : ""));
+                                }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 战斗音乐重放失败 " + e.Message); }
                             return;

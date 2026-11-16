@@ -856,7 +856,7 @@ namespace Together.Replay
             static void Postfix(SpiderHandler __instance)
             {
                 if (!ReplayRecorder.IsRecording || __instance == null) return;
-                try { ReplayRecorder.ThreatMusic((Vector2)__instance.transform.position); } catch { }
+                try { ReplayRecorder.ThreatMusic((Vector2)__instance.transform.position, __instance.droneToPlay); } catch { }
             }
         }
 
