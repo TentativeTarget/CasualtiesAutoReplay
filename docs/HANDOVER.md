@@ -292,6 +292,24 @@ PlayerCamera.HandleVariables: 每帧  threatMusicTime -= deltaTime
 - **老录像补不回来**（名字根本没写进文件），要看持械特效必须重录。
 - 排查口诀：`CtrepStats <file> swing` 能直接数出"带特效名 / 无特效名"各多少条。
 
+### 6.6c 全量表现层捕获（`37653ab`，开关 `[Recording] CaptureAllEffects`，默认开）
+
+用户要"拉一堆怪逐个杀"做覆盖验证，于是把能挂的表现层都挂上：
+
+| 通道 | 挂点 | 记录 | 回放 |
+|---|---|---|---|
+| 音效 | `Sound.Play(string/AudioClip, …)` | `Fx[2]` 名字+坐标 | `Sound.Play` 重放 |
+| 实例化特效 | `Object.Instantiate(Object)` | 名字+坐标（复用粒子通道，无类型字节） | 找同名预制体 Instantiate |
+| 粒子 | `ParticleSystem.Play` 全重载 | `Fx` 名字+坐标 | 同上 |
+| 动画 | `Animator.Play(string, …)` 全重载 | `Fx[17] = [x][y][layer][len][state]` | 4m 内 HasState 的最近 Animator 重放 |
+| 背景音乐 | `MusicManager.PlaySong` | `Fx[14]`／`Fx[15]` 状态快照 | `PlaySong` + 状态恢复 |
+| 威胁音乐 | 逐帧采样 `threatMusicTime`+`theme` | `Fx[16]` | 照抄两个字段 |
+| 死亡 | 反射扫描所有 `Die/Death/Kill` | 位置+类型+方法名 | 按名字/最近匹配后 Invoke |
+| 挥击 | `Body.Attack` / `Body.UseItemInHand` | `Swing`（玩家 id + 特效名） | 播 ArmsSwing + Instantiate 特效 |
+
+**注意**：动画回放是"就近找 Animator"，同名状态挂在多个模型上时可能播错对象——
+这是第一版，先看覆盖率（日志 `replay: 动画 <state> @x,y d=`），再决定要不要带对象路径。
+
 ### 6.7【别再试】没有引导的录像，从主菜单播不了 —— 这是物理边界
 
 **一句话**：录像里没有「开局公告 + 世界种子」，客户端就没有世界可建，怎么补都没用。**不要再往这上面投入。**
