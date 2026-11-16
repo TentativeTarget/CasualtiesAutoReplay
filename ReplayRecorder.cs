@@ -88,6 +88,7 @@ namespace Together.Replay
         static int _lastBiome = int.MinValue;
         static bool _seedCaptured;
         static bool _sigWritten;
+        static bool _bootstrapInFile;   // 本文件里是否已有引导包（含借来的）
 
         // 世界实例编号：每出现一个新世界 +1。用来判断"这两段录的是不是同一个世界"，
         // 比方块指纹可靠（玩家会把方块挖掉，指纹会变）。
@@ -162,6 +163,7 @@ namespace Together.Replay
 
             _writer = writer;
             _needPhantom = true;
+            _bootstrapInFile = false;
 
             // 新一次录制 = 新的一局：引导包缓存必须是这一局的。
             // 不清零会导致第二次开局仍在用上一局的种子/开局公告（甚至直接判定"已有引导"而不缓存）。
@@ -200,6 +202,7 @@ namespace Together.Replay
                 {
                     FlushBootstrapCache(writer);
                     writer.SetMeta("bootstrap", "1");
+                    _bootstrapInFile = true;
                     _sawStartGame = true;   // 引导已在文件里，之后的记录不再进缓存
                 }
             }
@@ -230,6 +233,7 @@ namespace Together.Replay
                     if (n > 0)
                     {
                         writer.SetMeta("bootstrap", "1");
+                        _bootstrapInFile = true;
                         _sawStartGame = true;
                         ReplayLog.Info("recorder: 从同世界的旧录像借来引导包（" + n + " 条，worldToken=" + _worldToken + "）");
                     }
@@ -251,7 +255,7 @@ namespace Together.Replay
             _nextFullBaseline = 0;
             BaselineCount = 0;
             _chunkDumps = 0;
-            _sawStartGame = false;
+            // _sawStartGame 可能已被上面"借到引导包"设为 true，这里不能再盖章清零
             _sawBootstrap = false;
             _diagAt = Clock.Elapsed.TotalSeconds + 5;
             _nextBaseline = 0;
@@ -410,7 +414,7 @@ namespace Together.Replay
             if (_writer == null) return;
             try
             {
-                _writer.SetMeta("bootstrap", _sawStartGame ? "1" : "0");
+                _writer.SetMeta("bootstrap", (_bootstrapInFile || _sawStartGame) ? "1" : "0");
                 if (_attackRelays > 0) _writer.SetMeta("attacks", _attackRelays.ToString());
                 ReplayLog.Info("recorder: 攻击转播 " + _attackRelays + " 条 / 挥爪事件 " + _swings + " 条");
                 _writer.SetMeta("les", ReplayVersion.LesVersion);
