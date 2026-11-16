@@ -310,6 +310,30 @@ PlayerCamera.HandleVariables: 每帧  threatMusicTime -= deltaTime
 **注意**：动画回放是"就近找 Animator"，同名状态挂在多个模型上时可能播错对象——
 这是第一版，先看覆盖率（日志 `replay: 动画 <state> @x,y d=`），再决定要不要带对象路径。
 
+**实测（`013927` 341 秒 / 4 种怪各杀一只）后的结论**：
+
+| 通道 | 条数 | 判定 |
+|---|---|---|
+| 音效 `Fx[2]` | 3808 | ✅ |
+| 血迹 `Fx[8]` | 495 | ✅ |
+| 死亡 `Fx[5]` | 4（Spider / CrystalEnemy / GuardScript / SpiderHandlerTBE） | ✅ 四种怪全中 |
+| 威胁音乐 `Fx[13]` / 状态 `Fx[16]` | 125 / 7128 | ✅ |
+| 挥击 `Swing` | 47（**全部带特效名**） | ✅ |
+| 弹道 `Fx[1]` | 55 | ✅ |
+| 粒子 | 64（MuzzleParticle 55、BlockBreak 6、BuildingBreak 3） | ⚠️ 只到`ParticleSystem.Play` 覆盖的那部分 |
+| 动画 `Fx[17]` | 4（`Grounded`×2、`GuardFall`×2） | ⚠️ 见下 |
+| 实例化捕获 | **0** | ❌ 挂不上 |
+
+两条要记住的结论：
+
+1. **`Object.Instantiate` 挂不上**：它是 UnityEngine 的 icall（native），Harmony 只能补丁托管方法。
+   `InstantiateFxWatch` 从 0.2.0 起就一直在"安装成功但永远不触发"的状态（日志里从没出现过
+   `fx: 攻击窗口内生成`）。别再指望它；需要"实例化出来的东西"就挂**它身上更具体的托管调用**
+   （`ParticleSystem.Play`、`Animator.Play`、`attackAnim` 这类数据字段）。
+2. **这游戏的角色动画不是 Mecanim**：敌人是 `SpriteRenderer` 换帧 + `walkCycleProgress` 这类本地计算，
+   所以 `Animator.Play` 全游戏只有 4 处会调（玩家手臂、守卫倒下、落地）。
+   好在**精灵动画由实体同步 + 本地逻辑自动还原**，不需要录；`Fx[17]` 只用来兜那 4 处。
+
 ### 6.7【别再试】没有引导的录像，从主菜单播不了 —— 这是物理边界
 
 **一句话**：录像里没有「开局公告 + 世界种子」，客户端就没有世界可建，怎么补都没用。**不要再往这上面投入。**
