@@ -1471,6 +1471,7 @@ namespace Together.Replay
                 (typeof(GameKeybindSettingsPatch), "game-keybinds"),
                 (typeof(BloodSpawnRecord), "blood-spawn"),
                 (typeof(TalkerForcePatch), "talker-force"),
+                (typeof(TalkerTalkRecord), "talker-talk"),
                 (typeof(ChatLogFilterPatch), "chat-log-filter"),
                 (typeof(InstantiateNameProbe), "instantiate-name-probe"),
                 (typeof(GuardPublishProbePatch), "guard-publish-probe"),

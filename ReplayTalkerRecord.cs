@@ -103,6 +103,54 @@ namespace Together.Replay
         }
     }
 
+    /// <summary>
+    /// 台词的真正入口：Talker.Talk(string, Limb, bool, bool) / Talk(List&lt;string&gt;, Limb, bool, bool)。
+    /// 主机本地 NPC 说话不走模组的 ForceNoSpeechImpairment（那是客户端补丁），
+    /// 所以必须挂在这里，否则回放里一句台词都没有。
+    /// </summary>
+    [HarmonyPatch]
+    internal static class TalkerTalkRecord
+    {
+        static int _logs;
+
+        static IEnumerable<MethodBase> TargetMethods()
+        {
+            var t = typeof(Talker);
+            var m1 = AccessTools.Method(t, "Talk",
+                new[] { typeof(string), typeof(Limb), typeof(bool), typeof(bool) });
+            var m2 = AccessTools.Method(t, "Talk",
+                new[] { typeof(System.Collections.Generic.List<string>), typeof(Limb), typeof(bool), typeof(bool) });
+            if (m1 != null) yield return m1;
+            if (m2 != null) yield return m2;
+        }
+
+        static void Postfix(Talker __instance, object[] __args)
+        {
+            if (!ReplayRecorder.IsRecording || __instance == null) return;
+            try
+            {
+                string text = null;
+                if (__args != null && __args.Length > 0)
+                {
+                    text = __args[0] as string;
+                    if (string.IsNullOrEmpty(text))
+                    {
+                        var list = __args[0] as System.Collections.Generic.List<string>;
+                        if (list != null && list.Count > 0) text = list[0];
+                    }
+                }
+                if (string.IsNullOrEmpty(text)) return;
+
+                var root = __instance.transform.root;
+                string rn = root != null ? root.name : __instance.gameObject.name;
+                ReplayRecorder.TalkerLine((Vector2)__instance.transform.position, rn, text);
+
+                if (_logs < 5) { _logs++; ReplayLog.Info("talker-rec: " + text); }
+            }
+            catch { }
+        }
+    }
+
     [HarmonyPatch]
     internal static class ChatLogFilterPatch
     {
