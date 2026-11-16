@@ -784,11 +784,14 @@ namespace Together.Replay
                                 int ahash = Animator.StringToHash(astate);
 
                                 Animator bestA = null;
-                                float bestAD = 4f;   // 只认 4m 内的（同名状态多半挂在不同的模型上）
+                                float bestAD = 15f;      // 15m 内（守卫这类模型位置会有偏差，4m 太紧）
+                                float nearestAny = 999f;
+                                string nearestName = "-";
                                 foreach (var an in AnimatorCache())
                                 {
                                     if (an == null || !an.isActiveAndEnabled) continue;
                                     float d = Vector2.Distance(an.transform.position, apos);
+                                    if (d < nearestAny) { nearestAny = d; nearestName = an.name; }
                                     if (d > bestAD) continue;
                                     bool has = false;
                                     try { has = an.HasState(alayer, ahash); } catch { }
@@ -804,7 +807,8 @@ namespace Together.Replay
                                         ReplayLog.Info("replay: 动画 " + astate + " @" + apos.x.ToString("0") + "," + apos.y.ToString("0")
                                             + " d=" + bestAD.ToString("0.0"));
                                 }
-                                else if (_animMiss++ < 8) ReplayLog.Warn("replay: 动画 " + astate + " 找不到 Animator");
+                                else if (_animMiss++ < 8) ReplayLog.Warn("replay: 动画 " + astate + " 找不到 Animator（最近的 " + nearestName
+                                    + " 在 " + nearestAny.ToString("0.0") + "m，共 " + AnimatorCache().Length + " 个）");
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 动画重放失败 " + e.Message); }
                             return;
