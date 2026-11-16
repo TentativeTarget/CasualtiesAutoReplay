@@ -791,12 +791,14 @@ namespace Together.Replay
 
                         // 首字节 13 = 战斗音乐（位置 + 主题号）
                         //
-                        // 原版链路（Assembly-CSharp 1.0.2）：
-                        //   SpiderHandler.PlayThreatMusic() 只做两件事——把 droneToPlay 写进
-                        //   PlayerCamera.currentThreatTheme；Lab 场景时再把 threatMusicTime 设 5。
-                        //   真正出声的是 MusicManager.Update：它每帧读 threatMusicTime > 0 才把
-                        //   威胁 drone 拉起来，而 threatMusicTime 由 PlayerCamera.HandleVariables
-                        //   每帧 -1 递减。
+                        // 原版链路（Assembly-CSharp 1.0.2，按 IL 逐条核对过）：
+                        //   SpiderHandler.Update 里"索敌成功"（OverlapCircle 命中 Body/Limb 且没被
+                        //   地形挡住）就调 PlayThreatMusic()；PlayThreatMusic 干两件事：
+                        //     PlayerCamera.currentThreatTheme = droneToPlay（Lab 场景改 17）
+                        //     PlayerCamera.threatMusicTime = 5        ← 无条件执行
+                        //   MusicManager.Update 每帧读 threatMusicTime > 0 才把 droneOn[主题] 拉起来，
+                        //   而 threatMusicTime 由 PlayerCamera.HandleVariables 每帧 -1 递减。
+                        // 也就是说：**战斗 BGM 的触发点是"被敌人索敌"，不是开火、也不是挨打。**
                         //
                         // 所以只"重放 PlayThreatMusic"是不够的：threatMusicTime 没人设，回放里
                         // 永远没声；而且模组给 PlayThreatMusic 挂了"相机离蜘蛛够近才放行"的

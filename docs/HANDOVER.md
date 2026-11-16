@@ -203,10 +203,27 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 4. `PlaySong` 事件照旧录（`Fx[14]`），换歌时同时更新目标曲目。
 5. 不录 `StopSong` —— 录到一次"停"，回放里音乐就永久没了。
 
-**战斗音乐是另一条链路**（`83ca013`）：原版 `SpiderHandler.PlayThreatMusic()` **不发声**，
-它只写 `PlayerCamera.currentThreatTheme`；`MusicManager.Update` 每帧看
-`threatMusicTime > 0` 才拉威胁 drone，而 `threatMusicTime` 由 `PlayerCamera.HandleVariables`
-每帧 -1 递减。现在录制时把主题号一起记下（payload 9→13 字节），回放直接写
+**战斗音乐：触发点是"被敌人索敌"，不是开火、也不是挨打**（2026-11-17 复核 IL 后更正）：
+
+```
+SpiderHandler.Update:
+    hit = Physics2D.OverlapCircle(pos, seeDistance, LayerMask("Body","Limb"))
+    if (hit != null && LinecastAll 到 Ground 没有遮挡)  →  PlayThreatMusic()
+SpiderHandler.PlayThreatMusic():                      ← 不发声，只改状态
+    PlayerCamera.currentThreatTheme = droneToPlay     （Lab 场景改 17）
+    PlayerCamera.threatMusicTime    = 5                ← 无条件执行
+MusicManager.Update: 每帧  threatMusicTime > 0  →  droneOn[主题] = true
+PlayerCamera.HandleVariables: 每帧  threatMusicTime -= deltaTime
+```
+
+> ⚠️ 之前这里写"只有 Lab 场景才设 `threatMusicTime = 5`"——**是错的**。
+> 看 IL 时漏了 `bne.un` 后面的公共尾段（`IL_0029`），实际无条件都会设 5。
+> 因此"只调一次 `PlayThreatMusic`"本身是有效的，真正让它失效的是
+> "找不到蜘蛛对象 / 模组给这个方法挂了相机距离前缀"。
+
+同样的"索敌"调用点还有 `ElderThornbackBehaviour.Update`、`SpiderHandler.CheckForLimbDamage`、`SpiderHandler.AnimalHit`；
+守卫走的是 `GuardScript.Update` 的射击分支（每帧刷 5）和 `<MeleeAttack>` 协程开头。
+现在录制时把主题号一起记下（payload 9→13 字节），回放直接写
 `currentThreatTheme` + `threatMusicTime = 5`，不再依赖"就近找蜘蛛"和模组的相机距离前缀。
 
 **实测数据**（`replay_5.5.2_20261117_010828.ctrp`，264s，录制端已带上全部记录）：
