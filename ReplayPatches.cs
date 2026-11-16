@@ -860,28 +860,31 @@ namespace Together.Replay
             }
         }
 
-        /// <summary>录制：背景音乐切换（含层主题、Boss 音乐）。</summary>
+        /// <summary>录制：播放背景音乐。</summary>
         [HarmonyPatch]
-        internal static class MusicRecordPatch
+        internal static class MusicPlayRecord
         {
-            static IEnumerable<MethodBase> TargetMethods()
-            {
-                var t = typeof(MusicManager);
-                var play = t.GetMethod("PlaySong", new[] { typeof(AudioClip) });
-                var stop = t.GetMethod("StopSong");
-                if (play != null) yield return play;
-                if (stop != null) yield return stop;
-            }
+            static MethodBase TargetMethod() => AccessTools.Method(typeof(MusicManager), "PlaySong", new[] { typeof(AudioClip) });
+            static bool Prepare() => TargetMethod() != null;
 
-            static void Postfix(MethodBase __originalMethod, AudioClip __0 = null)
+            static void Postfix(AudioClip __0)
+            {
+                if (!ReplayRecorder.IsRecording || __0 == null) return;
+                try { ReplayRecorder.Music(__0.name); } catch { }
+            }
+        }
+
+        /// <summary>录制：停止背景音乐（无参数方法，不能声明 __0）。</summary>
+        [HarmonyPatch]
+        internal static class MusicStopRecord
+        {
+            static MethodBase TargetMethod() => AccessTools.Method(typeof(MusicManager), "StopSong");
+            static bool Prepare() => TargetMethod() != null;
+
+            static void Postfix()
             {
                 if (!ReplayRecorder.IsRecording) return;
-                try
-                {
-                    if (__originalMethod.Name == "StopSong") { ReplayRecorder.Music("stop"); return; }
-                    if (__0 != null) ReplayRecorder.Music(__0.name);
-                }
-                catch { }
+                try { ReplayRecorder.Music("stop"); } catch { }
             }
         }
 
@@ -1535,7 +1538,8 @@ namespace Together.Replay
                 (typeof(TalkerTalkRecord), "talker-talk"),
                 (typeof(GuardMeleeRecord), "guard-melee"),
                 (typeof(ThreatMusicRecord), "threat-music"),
-                (typeof(MusicRecordPatch), "music"),
+                (typeof(MusicPlayRecord), "music-play"),
+                (typeof(MusicStopRecord), "music-stop"),
                 (typeof(ChatLogFilterPatch), "chat-log-filter"),
                 (typeof(InstantiateNameProbe), "instantiate-name-probe"),
                 (typeof(GuardPublishProbePatch), "guard-publish-probe"),
