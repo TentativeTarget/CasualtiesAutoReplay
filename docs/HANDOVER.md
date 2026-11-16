@@ -61,6 +61,7 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 
 | 提交 | 内容 |
 |---|---|
+| `83ca013` | 战斗音乐回放改为还原状态（录主题号）；不再盲调 `PlayThreatMusic`（见 6.4） |
 | `f8754c5` | `_biomeRecorded` 按文件清零（第二份录像头里缺 `biome`） |
 | `7c8d09f` | 引导检查挪到应用天空/层号之前，拒绝播放不留副作用 |
 | `191b5c2` | 录像头不再谎报 `bootstrap`；无引导文件从主菜单拒绝播放（见 6.1） |
@@ -164,9 +165,29 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 
 ### 6.4 音乐
 
-- 录 `MusicManager.PlaySong(AudioClip)` + `SpiderHandler.PlayThreatMusic()`
-- 回放按 clip 名找 `Resources.FindObjectsOfTypeAll<AudioClip>()` 再 `PlaySong`
-- **尚未实证**；找不到会打 `replay: 找不到音乐 <name>`
+**背景音乐**：录 `MusicManager.PlaySong(AudioClip)` → 回放按 clip 名找
+`Resources.FindObjectsOfTypeAll<AudioClip>()` 再 `PlaySong`；找不到打 `replay: 找不到音乐 <name>`。
+不录 `StopSong`（录到一次"停"，回放里音乐就永久没了）。**尚未实证**。
+
+**战斗音乐（已按 IL 核对并重写，`83ca013`）**：原版是**状态驱动**，不是"播一个音效"：
+
+```
+SpiderHandler.PlayThreatMusic()      只写 PlayerCamera.currentThreatTheme = droneToPlay
+                                     （只有 Lab 场景才顺手把 threatMusicTime 设 5）
+MusicManager.Update                  每帧：threatMusicTime > 0 才拉威胁 drone
+PlayerCamera.HandleVariables         每帧：threatMusicTime -= deltaTime
+Body.HandlePeriodicChecks            被生物咬时 threatMusicTime = 8（旁路）
+```
+
+所以"回放时调一次 `PlayThreatMusic`"**永远不会出声** —— 没人设 `threatMusicTime`。
+之前偶尔能听到，是现场真的又咬了一口（走 8 秒旁路），属于碰运气。
+再加上模组给 `PlayThreatMusic` 挂了 `KM.DistanceCheck(Camera.main, 蜘蛛)` 的 prefix，
+回放相机常不在蜘蛛旁边，连主题都设不进去。
+
+现在的做法：录制时把主题号（`droneToPlay`）一起记下来（payload 9→13 字节），
+回放直接写 `PlayerCamera.main.currentThreatTheme` + `threatMusicTime = 5`。
+不依赖蜘蛛对象是否已同步、也不依赖相机位置；老文件（9 字节）走"就近找 30m 内蜘蛛"的兜底。
+日志：`replay: 战斗音乐 theme=N`。**尚未实证**（要实机打一场蜘蛛看日志 + 听声音）。
 
 ### 6.5 中段开录 = 整段复制（用户同意先挂着）
 
@@ -220,6 +241,8 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 9. 一旦录到"停止音乐"，回放里音乐就永久没了 —— 所以 `StopSong` 不录
 10. **没有开局公告的录像 = 死文件**，主菜单播放无解（见 6.7）。别再试图补场景/补世界，
     要么世界里播，要么走 6.5 的父子段串联
+11. **`PlayThreatMusic` 不是"播战斗音乐"**，它只设主题；出声要 `threatMusicTime > 0`（见 6.4）。
+    凡是"只在某个事件里被调用一次"的原版方法，先读 IL 确认它到底改了什么状态
 
 ---
 
