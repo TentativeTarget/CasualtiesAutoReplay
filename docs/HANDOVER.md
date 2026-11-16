@@ -196,7 +196,22 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 每帧 -1 递减。现在录制时把主题号一起记下（payload 9→13 字节），回放直接写
 `currentThreatTheme` + `threatMusicTime = 5`，不再依赖"就近找蜘蛛"和模组的相机距离前缀。
 
-**待实证**：需要一局有音乐的录像（或至少世界就绪后听到 `补播背景音乐`）来确认。
+**实测数据**（`replay_5.5.2_20261117_010828.ctrp`，264s，录制端已带上全部记录）：
+
+| 时间 | 记录 | 含义 |
+|---|---|---|
+| 14.4s | `Fx[15]` at=0 sinceFinished=1.68s | 世界就绪时**就是静默**，静默计时才 1.68s |
+| 177.3s | `Fx[14]` `BeginAnew` | 第一首背景音乐 |
+| 36/139/228s… | `Fx[13]` theme=5 ×14 | 蜘蛛战斗音乐，带主题号 |
+
+**原版 `trackinterval` 默认 170 秒**（`Settings.DefaultSettings`）——"开局前几分钟没音乐"
+是游戏自己的设计。所以：回放这份文件时前 165 秒本来就该是静音，不是又丢了。
+
+**配置**：`[Replay] MusicFallback`（默认 `true`）——录像那一刻本来静默时也补播一首，
+保证回放不是纯静音；关掉则严格按录像（会先静音到 177s 才起歌）。
+
+**待实证**：需要重启游戏后回放这份文件，确认日志出现
+`replay: 补播背景音乐` / `replay: 音乐状态` / `replay: 音乐恢复 BeginAnew@0.0s`。
 
 ### 6.5 中段开录 = 整段复制（用户同意先挂着）
 
