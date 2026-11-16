@@ -261,6 +261,23 @@ PlayerCamera.HandleVariables: 每帧  threatMusicTime -= deltaTime
 
 同理可推广：**凡是"每帧按状态算出来的东西"，录状态；凡是"真的调了一次"的东西，录事件。**
 
+**威胁 drone 序号表（实测打印，`MusicManager.droneTracks`）**：
+
+```
+[0] PainDrone        [1] isthistheend    [2] exhausted      [3] tired
+[4] Biohazard        [5] SpidersInTheDark [6] despair       [7] HostileEncounter
+[8] drowning         [9] TheresHundreds  [10] RUN_FOR_YOUR_LIFE  [11] CombatInTheCold
+[12] amurderofyourown [13] CaveIn        [14] radlinepulse  [15] CHASE_IT_DOWN
+[16] FamiliarFace    [17] ThreatSimulacrum  [18] paranormalthreat  [19] ScorchedSteel
+```
+
+由此得到两个重要事实：
+
+- 蜘蛛的 `droneToPlay` 命中 **7 = HostileEncounter**，这就是"战斗 BGM"。
+- **守卫没有自己的主题号**：`GuardScript` 只刷 `threatMusicTime`，主题号沿用上一次的值。
+  没打过蜘蛛时它还是 0 → 原版在纯守卫战里响的其实是 **PainDrone**。这是游戏本身的设定，
+  回放按状态照抄（要改成 HostileEncounter 属于"改原版行为"，需另外决定）。
+
 **待实证**：需要重启游戏后回放这份文件，确认日志出现
 `replay: 补播背景音乐` / `replay: 音乐状态` / `replay: 音乐恢复 BeginAnew@0.0s`。
 
