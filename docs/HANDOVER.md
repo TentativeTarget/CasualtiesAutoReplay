@@ -217,7 +217,19 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 索引会按 `MusicManager.droneTracks.Count` 钳制——**越界会让 `MusicManager.Update` 每帧抛异常，
 反而彻底没音乐**。第一次触发会打印 `replay: 威胁 drone 列表 [0]=… [1]=…`，用来确认主题号对应哪条 drone。
 
-已知缺口：**守卫只开枪不上来近战**时没有可录的事件，那段音乐仍然依赖场景里守卫 AI 自己跑。
+已知缺口（已用 `e573007` 补掉）：**守卫只开枪不上来近战**时没有可录的事件。
+
+**根本解法：别挂触发点，采状态（`e573007`）**。音乐/drone 不是"播一下"的输出，
+是 `MusicManager.Update` 每帧按状态算音量——没有可挂的"播放调用"。
+所以录制端按 **5Hz** 采 `PlayerCamera.threatMusicTime` + `currentThreatTheme`，
+写进 `Fx[16] = [float 倒计时][int 主题号]`，只在变化 ≥0.4s / 主题变了 / 刚掉到 0 时写一条
+（一场 5 分钟战斗约 5KB）。回放端照抄这两个字段，**谁开的枪根本不重要**。
+
+这条通道自动覆盖：守卫对射、蜘蛛、水晶怪、生物咬人、任何会刷 `threatMusicTime` 的东西。
+其它 drone（疼痛/体力/缺氧/辐射/地震）的驱动量都在同步的身体/世界状态里，回放会自然还原；
+万一将来发现某个也是客户端本地量，往这条记录里加字段即可。
+
+同理可推广：**凡是"每帧按状态算出来的东西"，录状态；凡是"真的调了一次"的东西，录事件。**
 
 **待实证**：需要重启游戏后回放这份文件，确认日志出现
 `replay: 补播背景音乐` / `replay: 音乐状态` / `replay: 音乐恢复 BeginAnew@0.0s`。
