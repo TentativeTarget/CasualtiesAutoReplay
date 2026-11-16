@@ -172,6 +172,7 @@ namespace Together.Replay
             _sawStartGame = false;
             _rngCaptured = false;
             _seedCaptured = false;
+            _biomeRecorded = false;   // 同一个道理：否则第二份文件的头里永远没有 biome，层名会错
 
             // 新一次录制 = 新的一局：引导包缓存必须是这一局的。
             // 不清零会导致第二次开局仍在用上一局的种子/开局公告（甚至直接判定"已有引导"而不缓存）。
