@@ -953,6 +953,23 @@ namespace Together.Replay
             static void Prefix(GuardScript __instance) => ReplayDeathProbe.NoteDeath(__instance);
         }
 
+        /// <summary>
+        /// `PlushScript.Squeak()` = 玩偶被撞响。
+        ///
+        /// 玩偶是**同步的物品实体**，回放客户端里它照样有刚体和碰撞，
+        /// `OnCollisionEnter2D`（relativeVelocity > 2）会自己再响一次。
+        /// 所以这个声音**不能录**——录了就是双响。原版行为本来就是"物理自己算"。
+        /// </summary>
+        [HarmonyPatch]
+        internal static class PlushSqueakFilter
+        {
+            static MethodBase TargetMethod() => AccessTools.Method(typeof(PlushScript), "Squeak");
+            static bool Prepare() => TargetMethod() != null;
+
+            static void Prefix() { SoundRecordPatch.InLocalPhysicsSound = true; }
+            static void Postfix() { SoundRecordPatch.InLocalPhysicsSound = false; }
+        }
+
         /// <summary>录制：游戏播的每个音效都记一条（名字 + 位置），回放时重播。</summary>
         [HarmonyPatch]
         internal static class SoundRecordPatch
@@ -1003,6 +1020,9 @@ namespace Together.Replay
 
             static int _globalLogs;
             static bool _lastIs2D;
+
+            // 由本地物理/AI 触发、回放端会自行重现的声音：不录（否则双响）
+            internal static bool InLocalPhysicsSound;
             static Vector2 _lastPos;
             static float _lastAt = -1f;
 
@@ -1011,6 +1031,7 @@ namespace Together.Replay
                                         float volume = 1f, float pitch = 1f, float clipLength = -1f)
             {
                 if (!ReplayRecorder.IsRecording) return;
+                if (InLocalPhysicsSound) return;   // 玩偶那种：回放端物理自己会响
                 try
                 {
                     // 同一次 Sound.Play 会被"字符串重载"和"AudioClip 重载"各命中一次，
@@ -1730,6 +1751,7 @@ namespace Together.Replay
                 (typeof(GuardDeathProbePatch), "guard-death-probe"),
                 (typeof(DestroyProbe), "destroy-probe"),
                 (typeof(SoundRecordPatch), "sound-record"),
+                (typeof(PlushSqueakFilter), "plush-squeak-filter"),
                 (typeof(SoundRecordClipPatch), "sound-record-clip"),
                 (typeof(AnimLayerProbe), "anim-layers"),
                 (typeof(InputBlockCollect), "input-block-collect"),
