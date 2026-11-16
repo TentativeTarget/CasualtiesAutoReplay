@@ -735,7 +735,7 @@ namespace Together.Replay
                                         if (clip != null)
                                         {
                                             mm.PlaySong(clip);
-                                            ReplayMusic.Want(what, 0f);   // 换歌后继续跟住，换场景也能补放
+                                            ReplayMusic.Want(what, 0f, 0f);   // 换歌后继续跟住，换场景也能补放
                                         }
                                         else ReplayLog.Warn("replay: 找不到音乐 " + what);
                                     }
@@ -751,11 +751,13 @@ namespace Together.Replay
                             try
                             {
                                 float at = BitConverter.ToSingle(rec.Data, 1);
+                                float sinceFinished = BitConverter.ToSingle(rec.Data, 5);
                                 string nm = System.Text.Encoding.UTF8.GetString(rec.Data, 9, rec.Length - 9);
-                                ReplayMusic.Want(nm, at);
+                                ReplayMusic.Want(nm, at, sinceFinished);
                                 ReplayMusic.TickApply();
                                 if (_musicStateLogs++ < 6)
-                                    ReplayLog.Info("replay: 音乐状态 " + (string.IsNullOrEmpty(nm) ? "（静默）" : nm + " @" + at.ToString("0.0") + "s"));
+                                    ReplayLog.Info("replay: 音乐状态 " + (string.IsNullOrEmpty(nm) ? "（静默）" : nm + " @" + at.ToString("0.0") + "s")
+                                        + " 静默计时=" + sinceFinished.ToString("0.0") + "s");
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 音乐状态应用失败 " + e.Message); }
                             return;

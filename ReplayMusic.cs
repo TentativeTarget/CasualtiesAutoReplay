@@ -88,23 +88,48 @@ namespace Together.Replay
         // ---- 回放侧：记住"这段录像这个时刻该放什么"，等 MusicManager 真的存在了再补放 ----
         static string _wantClip = "";
         static float _wantTime;
+        static float _wantSinceFinished;
         static int _appliedId;
+        static int _timerAppliedId;
         static int _applyLogs;
+        static bool _haveState;
 
         public static string WantedClip => _wantClip;
 
         /// <summary>录像要求的目标音乐（空字符串 = 此刻本来是静默）。</summary>
-        public static void Want(string clipName, float time)
+        public static void Want(string clipName, float time, float sinceFinished)
         {
             _wantClip = clipName ?? "";
             _wantTime = time;
-            _appliedId = 0;      // 允许重新应用一次
+            _wantSinceFinished = sinceFinished;
+            _appliedId = 0;        // 允许重新应用一次
+            _timerAppliedId = 0;
+            _haveState = true;
         }
+
+        /// <summary>录像里有没有记过音乐状态（有 = 能按原版节奏还原静默期）。</summary>
+        public static bool HaveState => _haveState;
 
         /// <summary>每帧调用：MusicManager 换了实例（换场景）或还没恢复过，就补放一次。</summary>
         public static void TickApply()
         {
-            if (string.IsNullOrEmpty(_wantClip)) return;
+            if (string.IsNullOrEmpty(_wantClip))
+            {
+                // 录像那一刻是静默：把关掉的"静默计时"补回去，让游戏自己的 170s 间隔
+                // （trackinterval 默认 170）按原版节奏继续走，音乐就会在录到的那个时刻出现。
+                var m0 = MM;
+                if (m0 == null || !_haveState) return;
+                int id0 = m0.GetInstanceID();
+                if (id0 == _timerAppliedId) return;
+                _timerAppliedId = id0;
+                try
+                {
+                    if (_wantSinceFinished > 0f) m0.timeSinceFinishedPlaying = _wantSinceFinished;
+                }
+                catch { }
+                return;
+            }
+
             var mm = MM;
             var src = Source;
             if (mm == null || src == null) return;
@@ -146,7 +171,8 @@ namespace Together.Replay
             if (mm == null || src == null) return;               // MusicManager 还没就位，下一帧再试
 
             if (!string.IsNullOrEmpty(_wantClip)) { TickApply(); return; }
-            if (src.isPlaying && src.clip != null) return;       // 已经在放了，别抢
+            if (_haveState && !ReplayPlugin.MusicFallback) return;   // 严格按录像：该静默就静默
+            if (src.isPlaying && src.clip != null) return;           // 已经在放了，别抢
             if (_triedFallback) return;
 
             _triedFallback = true;
@@ -164,6 +190,9 @@ namespace Together.Replay
             _wantClip = "";
             _wantTime = 0f;
             _appliedId = 0;
+            _timerAppliedId = 0;
+            _haveState = false;
+            _wantSinceFinished = 0f;
             _triedFallback = false;
         }
     }

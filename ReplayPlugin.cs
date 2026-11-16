@@ -61,6 +61,8 @@ namespace Together.Replay
         /// <summary>我们自己的 UI（光箱/剪辑器）是否打开——此时屏蔽游戏输入。</summary>
         public static bool UiOpen => ReplayLightboxUi.Visible || ReplayEditorUi.Visible;
         internal static ConfigEntry<bool> PovBindingCfg;
+        /// <summary>回放里没有音乐状态时是否补播一首（见 ReplayMusic.EnsurePlaying）。</summary>
+        internal static bool MusicFallback = true;
         /// <summary>诊断：不改世界生成相关的任何标志，让游戏按联机原流程生成。</summary>
         public static bool NoWorldGenForce = false;
         internal static ConfigEntry<bool> NullMode;
@@ -130,6 +132,8 @@ namespace Together.Replay
             try { InjectFakeClient = Config.Bind("Recording", "InjectFakeClient", true, "注入假客户端 id，让只发给客户端的消息也能被录到。").Value; } catch { }
             try { FakeClientId = (ushort)Config.Bind("Recording", "FakeClientId", 250, "假客户端 id（不要与真实玩家 id 冲突）。").Value; } catch { }
             try { AutoSpectator = Config.Bind("Replay", "AutoSpectator", true, "进入世界后自动开启无 HUD 观战。").Value; } catch { }
+            try { MusicFallback = Config.Bind("Replay", "MusicFallback", true,
+                "录像那一刻本来没在放音乐时，回放也补一首背景音乐（关掉=严格按录像，开局可能长时间没声）。").Value; } catch { }
             try { AutoCheats = Config.Bind("Replay", "AutoCheats", true, "进入回放时自动开启作弊（sv_cheats + 客户端作弊命令）。").Value; } catch { }
             try { AutoSpectate = Config.Bind("Replay", "AutoSpectate", true, "回放开始时让客户端自动进入观战模式（尝试避免生成本地身体）。").Value; } catch { }
             try { BlockMoveInput = Config.Bind("Replay", "BlockMoveInput", false, "回放时屏蔽鼠标/键盘输入（防止操控录像里的身体）。默认关闭：先让观看者自由操作，确认无副作用再开。").Value; } catch { }
