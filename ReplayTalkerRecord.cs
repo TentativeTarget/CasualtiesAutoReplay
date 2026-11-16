@@ -114,13 +114,16 @@ namespace Together.Replay
 
         static bool Prepare() => TargetMethod() != null;
 
-        static void Postfix(object[] __args)
+        // 注意：5.5.2 里 LogMessage(string, string, ref bool) 的第三个参数是 byref，
+        // Harmony 用 object[] __args 接这种签名会 IL 编译失败，所以按位置声明参数，
+        // 并且完全不去碰那个 ref bool。
+        static void Postfix(string __0, string __1)
         {
             try
             {
                 if (!ReplayRecorder.IsRecording) return;
-                if (__args == null || __args.Length < 2) return;
-                ReplayChatLogFilter.Note(__args[1] as string);
+                if (string.IsNullOrEmpty(__1)) return;
+                ReplayChatLogFilter.Note(__1);
             }
             catch { }
         }
