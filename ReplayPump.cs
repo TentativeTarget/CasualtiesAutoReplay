@@ -619,6 +619,57 @@ namespace Together.Replay
         static float _lastSwingPlay = -1f;
         static int _threatLogs, _threatMissLogs, _musicStateLogs, _animLogs, _animMiss, _globalSoundLogs, _musicCtlLogs;
 
+        // ---- 音效回放：自己解析 clip，不依赖 Sound.Play(string) 的 "Sounds/" 前缀 ----------
+        static readonly System.Collections.Generic.Dictionary<string, AudioClip> _clipCache =
+            new System.Collections.Generic.Dictionary<string, AudioClip>();
+        static int _clipMissLogs;
+
+        /// <summary>
+        /// 按录像里的名字找 AudioClip。原版 `Sound.Play(string)` 会拼 "Sounds/" 前缀再去
+        /// Resources.Load，所以像 music/thornbackDefeat 这种带路径的名字能解析，
+        /// 而裸 clip 名（旧录像里记的）不能。这里两种都试，最后再按名字全场扫一遍。
+        /// </summary>
+        static AudioClip ResolveClip(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return null;
+            if (_clipCache.TryGetValue(name, out var hit) && hit != null) return hit;
+
+            AudioClip c = null;
+            try { c = Resources.Load<AudioClip>("Sounds/" + name); } catch { }
+            if (c == null) { try { c = Resources.Load<AudioClip>(name); } catch { } }
+
+            string tail = name.Contains("/") ? name.Substring(name.LastIndexOf('/') + 1) : name;
+            if (c == null)
+            {
+                try
+                {
+                    foreach (var a in Resources.FindObjectsOfTypeAll<AudioClip>())
+                    {
+                        if (a == null) continue;
+                        if (a.name == name || a.name == tail) { c = a; break; }
+                    }
+                }
+                catch { }
+            }
+
+            if (c != null) _clipCache[name] = c;
+            return c;
+        }
+
+        /// <summary>回放一条录到的音效（参数顺序按原版签名：…, volume, pitch, noReverb, ignoreMixer）。</summary>
+        static void PlayRecordedSound(string name, Vector2 pos, bool is2D,
+                                      bool noReverb, bool ignoreMixer, float volume, float pitch)
+        {
+            var clip = ResolveClip(name);
+            if (clip == null)
+            {
+                if (_clipMissLogs++ < 8) ReplayLog.Warn("replay: 找不到音效 " + name);
+                return;
+            }
+            try { Sound.Play(clip, pos, is2D, false, null, volume, pitch, noReverb, ignoreMixer); }
+            catch (Exception e) { ReplayLog.Warn("replay: 音效播放失败 " + e.Message); }
+        }
+
         // 动画事件可能一秒几十条，FindObjectsOfType 每次都扫全场会卡；半秒缓存一次
         static Animator[] _animCache;
         static float _animCacheAt = -1f;
@@ -1162,8 +1213,8 @@ namespace Together.Replay
                                 float vol = BitConverter.ToSingle(rec.Data, 10);
                                 float pit = BitConverter.ToSingle(rec.Data, 14);
                                 string sclip = System.Text.Encoding.UTF8.GetString(rec.Data, 18, rec.Length - 18);
-                                Sound.Play(sclip, spos, (fl & 1) != 0, false, null, vol, pit,
-                                           (fl & 2) != 0, (fl & 4) != 0);
+                                PlayRecordedSound(sclip, spos, (fl & 1) != 0,
+                                                  (fl & 2) != 0, (fl & 4) != 0, vol, pit);
                                 if (_globalSoundLogs++ < 12)
                                     ReplayLog.Info("replay: 音效 " + sclip + " 2D=" + ((fl & 1) != 0)
                                         + " ignoreMixer=" + ((fl & 2) != 0));
@@ -1180,7 +1231,7 @@ namespace Together.Replay
                                 var gpos2 = new Vector2(BitConverter.ToSingle(rec.Data, 1),
                                                         BitConverter.ToSingle(rec.Data, 5));
                                 string gclip = System.Text.Encoding.UTF8.GetString(rec.Data, 10, rec.Length - 10);
-                                Sound.Play(gclip, gpos2, true, false, null, 1f, 1f, false, false);
+                                PlayRecordedSound(gclip, gpos2, true, false, false, 1f, 1f);
                                 if (_globalSoundLogs++ < 12) ReplayLog.Info("replay: 全局音效 " + gclip);
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 全局音效失败 " + e.Message); }
@@ -1196,7 +1247,7 @@ namespace Together.Replay
                                 string clip = System.Text.Encoding.UTF8.GetString(rec.Data, 1, nameEnd2 - 1);
                                 var pos2 = new Vector2(BitConverter.ToSingle(rec.Data, nameEnd2),
                                                        BitConverter.ToSingle(rec.Data, nameEnd2 + 4));
-                                try { Sound.Play(clip, pos2, false, false, null, 1f, 1f, false, false); } catch { }
+                                PlayRecordedSound(clip, pos2, false, false, false, 1f, 1f);
                             }
                             return;
                         }

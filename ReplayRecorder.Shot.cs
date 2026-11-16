@@ -29,7 +29,7 @@ namespace Together.Replay
         /// 2D 音效单独用 `Fx[18]` 记录，回放时按 2D 播。
         /// </summary>
         public static void SoundEvent(string clip, Vector2 pos,
-                                      bool is2D = false, bool ignoreMixer = false, bool noReverb = false,
+                                      bool is2D = false, bool noReverb = false, bool ignoreMixer = false,
                                       float volume = 1f, float pitch = 1f)
         {
             if (_writer == null || string.IsNullOrEmpty(clip)) return;
@@ -52,8 +52,8 @@ namespace Together.Replay
                 BitConverter.GetBytes(pos.y).CopyTo(p2, 5);
                 byte flags = 0;
                 if (is2D) flags |= 1;
-                if (ignoreMixer) flags |= 2;
-                if (noReverb) flags |= 4;
+                if (noReverb) flags |= 2;      // 与 Sound.Play 参数顺序一致：8=noReverb, 9=ignoreMixer
+                if (ignoreMixer) flags |= 4;
                 p2[9] = flags;
                 BitConverter.GetBytes(volume).CopyTo(p2, 10);
                 BitConverter.GetBytes(pitch).CopyTo(p2, 14);
