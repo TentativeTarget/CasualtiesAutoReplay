@@ -185,6 +185,27 @@ namespace Together.Replay
         }
 
         /// <summary>
+        /// 只刷新威胁倒计时，**不动主题号**。
+        /// 原版 `<GuardScript.MeleeAttack>` 和 `GuardScript.Update` 就是这么干的：
+        /// 它们只写 `threatMusicTime`，主题号沿用上一次的值。我们要是顺手塞个主题，
+        /// 就是在改原版行为。
+        /// </summary>
+        public static void PulseThreat(float seconds, string why = null)
+        {
+            try
+            {
+                var cam = PlayerCamera.main;
+                if (cam == null) return;
+                cam.threatMusicTime = seconds;
+                if (_threatApplies++ < 8)
+                    ReplayLog.Info("replay: 威胁倒计时 " + seconds.ToString("0.0") + "s"
+                        + (string.IsNullOrEmpty(why) ? "" : "（" + why + "）")
+                        + " 主题保持=" + cam.currentThreatTheme);
+            }
+            catch { }
+        }
+
+        /// <summary>
         /// 起一段"威胁音乐"（战斗 drone）。原版就是这么干的：
         /// MusicManager.Update 每帧看 <c>PlayerCamera.threatMusicTime &gt; 0</c>，
         /// 然后把 <c>droneOn[currentThreatTheme]</c> 拉起来，threatMusicTime 自己每帧 -1。
@@ -243,7 +264,7 @@ namespace Together.Replay
             if (mm == null || src == null) return;               // MusicManager 还没就位，下一帧再试
 
             if (!string.IsNullOrEmpty(_wantClip)) { TickApply(); return; }
-            if (_haveState && !ReplayPlugin.MusicFallback) return;   // 严格按录像：该静默就静默
+            if (!ReplayPlugin.MusicFallback) return;   // 默认：严格按原版，不补播
             if (src.isPlaying && src.clip != null) return;           // 已经在放了，别抢
             if (_triedFallback) return;
 

@@ -926,9 +926,8 @@ namespace Together.Replay
                                     // 原版 <GuardScript.MeleeAttack> 协程第一件事就是
                                     // PlayerCamera.main.threatMusicTime = 5；回放里我们只重播动画
                                     // 不跑协程，所以战斗音乐得自己补上。
-                                    int guardTheme = -1;
-                                    if (rec.Length >= 13) guardTheme = BitConverter.ToInt32(rec.Data, 9);
-                                    ReplayMusic.PlayThreat(guardTheme, 5f, "守卫近战");
+                                    // 原版守卫只刷 threatMusicTime，不碰主题号；这里也只刷倒计时
+                                    ReplayMusic.PulseThreat(5f, "守卫近战");
 
                                     try
                                     {
