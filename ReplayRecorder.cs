@@ -170,6 +170,30 @@ namespace Together.Replay
             }
             catch (Exception e) { ReplayLog.Warn("recorder: 写入引导包失败 " + e.Message); }
 
+            // 半路开录（本局没抓到引导包）→ 从同世界的旧录像里借一份
+            try
+            {
+                var w2 = WorldGeneration.world;
+                string sig = WorldSig();
+                if (!string.IsNullOrEmpty(sig)) writer.SetMeta("worldsig", sig);
+
+                if (!HasBootstrap && w2 != null && w2.worldExists && !string.IsNullOrEmpty(sig))
+                {
+                    int n = BorrowBootstrap(writer, _path, sig);
+                    if (n > 0)
+                    {
+                        writer.SetMeta("bootstrap", "1");
+                        _sawStartGame = true;
+                        ReplayLog.Info("recorder: 从同世界的旧录像借来引导包（" + n + " 条）");
+                    }
+                    else
+                    {
+                        ReplayLog.Warn("recorder: 半路开录且找不到同世界的引导包，本文件将无法独立回放");
+                    }
+                }
+            }
+            catch (Exception e) { ReplayLog.Warn("recorder: 借引导包失败 " + e.Message); }
+
             _lastStamp = 0;
             _nextChunkDump = 0;
             _dropped = 0;
@@ -191,6 +215,89 @@ namespace Together.Replay
             ReplayLog.Info("recorder: ===== 开始录制 frame=" + Time.frameCount + " t=" + Time.realtimeSinceStartup.ToString("0.00") + " =====");
             ReplayLog.Info("recorder: 开始录制 -> " + _path + " (phantom id=" + PhantomId + ")");
             return true;
+        }
+
+        /// <summary>
+        /// 世界指纹：取若干固定坐标的方块类型做哈希。
+        /// 内存里拿不到种子，但同一张地图的方块布局是稳定的，足以判断"是不是同一个世界"。
+        /// </summary>
+        public static string WorldSig()
+        {
+            try
+            {
+                var w = WorldGeneration.world;
+                if (w == null || !w.worldExists) return null;
+
+                var pts = new[]
+                {
+                    new Vector2Int(0, 0), new Vector2Int(64, 64), new Vector2Int(-128, 32),
+                    new Vector2Int(200, -96), new Vector2Int(-300, -150), new Vector2Int(37, 411),
+                };
+
+                ulong h = 1469598103934665603UL;
+                foreach (var p in pts)
+                {
+                    ushort b = 0;
+                    try { b = w.GetBlock(p); } catch { }
+                    h = (h ^ b) * 1099511628211UL;
+                }
+                return h.ToString("x16");
+            }
+            catch { return null; }
+        }
+
+        /// <summary>从同世界的旧录像里复制引导段（第一条 Chunk/Keyframe 之前的所有记录）。</summary>
+        static int BorrowBootstrap(ReplayWriter writer, string currentPath, string sig)
+        {
+            int copied = 0;
+            try
+            {
+                var dir = System.IO.Path.GetDirectoryName(currentPath);
+                if (string.IsNullOrEmpty(dir) || !System.IO.Directory.Exists(dir)) return 0;
+
+                var files = System.IO.Directory.GetFiles(dir, "*.ctrp");
+                System.Array.Sort(files, (a, b) =>
+                    System.IO.File.GetLastWriteTimeUtc(b).CompareTo(System.IO.File.GetLastWriteTimeUtc(a)));
+
+                int tried = 0;
+                foreach (var f in files)
+                {
+                    if (string.Equals(f, currentPath, System.StringComparison.OrdinalIgnoreCase)) continue;
+                    if (++tried > 12) break;
+
+                    try
+                    {
+                        using (var reader = new ReplayReader(f))
+                        {
+                            string dSig, dBoot;
+                            if (!reader.Meta.TryGetValue("bootstrap", out dBoot) || dBoot != "1") continue;
+                            if (!reader.Meta.TryGetValue("worldsig", out dSig) || dSig != sig) continue;
+
+                            long prevMs = -1;
+                            while (reader.TryRead(out var r))
+                            {
+                                if (r.Kind == ReplayKind.Chunk || r.Kind == ReplayKind.Keyframe) break;
+
+                                // 捐赠文件的 dt 不存盘，按相邻记录的时间差还原
+                                ushort dt = 0;
+                                if (prevMs >= 0)
+                                {
+                                    long d = (long)r.TimeMs - prevMs;
+                                    if (d > 0) dt = (ushort)Math.Min(ushort.MaxValue, d);
+                                }
+                                prevMs = r.TimeMs;
+
+                                writer.Write(r.Kind, r.Pov, r.Tick, dt, r.Data, r.Length);
+                                copied++;
+                            }
+                        }
+                        if (copied > 0) break;
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception e) { ReplayLog.Warn("recorder: 读旧录像失败 " + e.Message); }
+            return copied;
         }
 
         /// <summary>把主机当前的天空颜色/雨量写进录像头，回放时就能精确还原。</summary>
