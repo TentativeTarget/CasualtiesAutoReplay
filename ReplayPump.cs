@@ -638,16 +638,26 @@ namespace Together.Replay
             try { c = Resources.Load<AudioClip>("Sounds/" + name); } catch { }
             if (c == null) { try { c = Resources.Load<AudioClip>(name); } catch { } }
 
+            // 按名字扫全场：只在名字"唯一"时才认。
+            // 这游戏大量音效是变体名（"1"/"3"/"7"…），不同目录下同名的 clip 不止一个，
+            // 随便挑一个就会放出"没听过的声音"。歧义就放弃，宁可不响。
             string tail = name.Contains("/") ? name.Substring(name.LastIndexOf('/') + 1) : name;
             if (c == null)
             {
                 try
                 {
+                    AudioClip found = null;
+                    int same = 0;
                     foreach (var a in Resources.FindObjectsOfTypeAll<AudioClip>())
                     {
                         if (a == null) continue;
-                        if (a.name == name || a.name == tail) { c = a; break; }
+                        if (a.name != name && a.name != tail) continue;
+                        if (found == null) { found = a; same = 1; }
+                        else if (a != found) { same++; if (same > 1) break; }
                     }
+                    if (same == 1) c = found;
+                    else if (same > 1 && _clipMissLogs++ < 8)
+                        ReplayLog.Warn("replay: 音效名有歧义，跳过 " + name + "（同名 clip " + same + " 个）");
                 }
                 catch { }
             }
