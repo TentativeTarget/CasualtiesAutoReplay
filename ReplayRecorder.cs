@@ -225,7 +225,7 @@ namespace Together.Replay
                     {
                         string donor;
                         if (_worldFiles.TryGetValue(_worldToken, out donor) && System.IO.File.Exists(donor))
-                            n = BorrowFromFile(writer, donor);
+                            n = BorrowFromFile(writer, donor, full: true);   // 中段开录：整段接上，否则没有实体生成消息
                     }
 
                     // ③ 再退一步：按指纹在目录里找
@@ -298,7 +298,7 @@ namespace Together.Replay
         }
 
         /// <summary>从指定文件复制引导段。</summary>
-        static int BorrowFromFile(ReplayWriter writer, string path)
+        static int BorrowFromFile(ReplayWriter writer, string path, bool full = false)
         {
             int copied = 0;
             try
@@ -311,7 +311,8 @@ namespace Together.Replay
                     long prevMs = -1;
                     while (reader.TryRead(out var r))
                     {
-                        if (r.Kind == ReplayKind.Chunk || r.Kind == ReplayKind.Keyframe) break;
+                        // full=true：整段接上（含实体生成、玩家加入），否则只接引导包
+                        if (!full && (r.Kind == ReplayKind.Chunk || r.Kind == ReplayKind.Keyframe)) break;
 
                         ushort dt = 0;
                         if (prevMs >= 0)
