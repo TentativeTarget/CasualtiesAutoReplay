@@ -892,6 +892,33 @@ namespace Together.Replay
 
 
 
+        /// <summary>录制：停歌 / 停 drone（`ElderThornbackBehaviour.OnDestroy` 那种"成就音效掐掉所有音乐"）。</summary>
+        [HarmonyPatch]
+        internal static class MusicControlRecord
+        {
+            static IEnumerable<MethodBase> TargetMethods()
+            {
+                var stop = AccessTools.Method(typeof(MusicManager), "StopSong");
+                if (stop != null) yield return stop;
+                var drone = AccessTools.Method(typeof(MusicManager), "StopDrone", new[] { typeof(int) });
+                if (drone != null) yield return drone;
+            }
+
+            static bool Prepare() { foreach (var _ in TargetMethods()) return true; return false; }
+
+            static void Postfix(MethodBase __originalMethod, object[] __args)
+            {
+                if (!ReplayRecorder.IsRecording || __originalMethod == null) return;
+                try
+                {
+                    if (__originalMethod.Name == "StopSong") { ReplayRecorder.MusicStop(); return; }
+                    if (__originalMethod.Name == "StopDrone" && __args != null && __args.Length > 0 && __args[0] is int idx)
+                        ReplayRecorder.DroneStop(idx);
+                }
+                catch { }
+            }
+        }
+
         /// <summary>录制：守卫近战（含 tesla 电击特效）。协程挂不住，所以只记开始位置，回放端重播同一段。</summary>
         [HarmonyPatch]
         internal static class GuardMeleeRecord
@@ -951,12 +978,23 @@ namespace Together.Replay
             }
 
             static int _globalLogs;
+            static bool _lastIs2D;
+            static Vector2 _lastPos;
+            static float _lastAt = -1f;
 
             internal static void Record(string clip, Vector2 pos, bool is2D)
             {
                 if (!ReplayRecorder.IsRecording) return;
                 try
                 {
+                    // 同一次 Sound.Play 会被"字符串重载"和"AudioClip 重载"各命中一次，
+                    // 名字还不一样（music/thornbackDefeat vs thornbackDefeat），
+                    // 结果回放里同一个音效叠着放两遍。这里按"同一位置 + 同一帧"合并。
+                    float nowS = Time.unscaledTime;
+                    if (_lastAt >= 0f && nowS - _lastAt < 0.005f
+                        && Vector2.Distance(pos, _lastPos) < 0.01f && is2D == _lastIs2D)
+                        return;
+                    _lastAt = nowS; _lastPos = pos; _lastIs2D = is2D;
                     // 全局（2D）音效：坐标是占位值，绝不能拿它做距离过滤
                     if (is2D)
                     {
@@ -1651,6 +1689,7 @@ namespace Together.Replay
                 (typeof(GuardMeleeRecord), "guard-melee"),
                 (typeof(ThreatMusicRecord), "threat-music"),
                 (typeof(MusicPlayRecord), "music-play"),
+                (typeof(MusicControlRecord), "music-ctl"),
                 (typeof(ChatLogFilterPatch), "chat-log-filter"),
                 (typeof(InstantiateNameProbe), "instantiate-name-probe"),
                 (typeof(GuardPublishProbePatch), "guard-publish-probe"),

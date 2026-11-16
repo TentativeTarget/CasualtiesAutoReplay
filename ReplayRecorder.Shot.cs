@@ -171,6 +171,29 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
+        /// <summary>
+        /// 记一次 `MusicManager.StopSong()`（payload = [19]）。
+        ///
+        /// 以前故意不录：录到一次"停"会让回放里音乐永久没了。
+        /// 但原版真的有"专门停歌"的场合——比如 `ElderThornbackBehaviour.OnDestroy`：
+        ///   StopDrone(15) → Sound.Play("music/thornbackDefeat", 2D, ignoreMixer) → StopSong() → threatMusicTime = 0
+        /// 也就是击杀时那声"成就音效"，同时把所有音乐掐掉。不录这一下，回放里战斗音乐就会
+        /// 在成就音效上继续放，听起来就是"音乐没停"。
+        /// </summary>
+        public static void MusicStop()
+        {
+            if (_writer == null) return;
+            try { WriteToFile(ReplayKind.Fx, 0, new byte[] { 19 }, 1); } catch { }
+        }
+
+        /// <summary>记一次 `MusicManager.StopDrone(index)`（payload = [20][index]）。</summary>
+        public static void DroneStop(int index)
+        {
+            if (_writer == null) return;
+            if (index < 0 || index > 250) return;
+            try { WriteToFile(ReplayKind.Fx, 0, new byte[] { 20, (byte)index }, 2); } catch { }
+        }
+
         /// <summary>记一条背景音乐变化：payload = [14][clip 名 或 "stop"]。</summary>
         public static void Music(string what)
         {

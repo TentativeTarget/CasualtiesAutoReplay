@@ -617,7 +617,7 @@ namespace Together.Replay
         static int _seekStartMs;
         static int _seekDispatched;
         static float _lastSwingPlay = -1f;
-        static int _threatLogs, _threatMissLogs, _musicStateLogs, _animLogs, _animMiss, _globalSoundLogs;
+        static int _threatLogs, _threatMissLogs, _musicStateLogs, _animLogs, _animMiss, _globalSoundLogs, _musicCtlLogs;
 
         // 动画事件可能一秒几十条，FindObjectsOfType 每次都扫全场会卡；半秒缓存一次
         static Animator[] _animCache;
@@ -1121,6 +1121,33 @@ namespace Together.Replay
                                 }
                             }
                             catch { }
+                            return;
+                        }
+
+                        // 首字节 19 = 停歌（原版"成就音效"那一套会先掐掉所有音乐）
+                        if (rec.Length >= 1 && rec.Data[0] == 19)
+                        {
+                            try
+                            {
+                                var mmS = ReplayMusic.MM;
+                                if (mmS != null) { mmS.StopSong(); ReplayMusic.OnStopSong(); }
+                                if (_musicCtlLogs++ < 8) ReplayLog.Info("replay: 停歌（原版在这停了）");
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 停歌失败 " + e.Message); }
+                            return;
+                        }
+
+                        // 首字节 20 = 停某条 drone（[20][index]）
+                        if (rec.Length >= 2 && rec.Data[0] == 20)
+                        {
+                            try
+                            {
+                                var mmD = ReplayMusic.MM;
+                                int di = rec.Data[1];
+                                if (mmD != null) mmD.StopDrone(di);
+                                if (_musicCtlLogs++ < 8) ReplayLog.Info("replay: 停 drone " + di);
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 停 drone 失败 " + e.Message); }
                             return;
                         }
 

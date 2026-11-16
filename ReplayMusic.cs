@@ -256,6 +256,19 @@ namespace Together.Replay
             catch (Exception e) { ReplayLog.Warn("replay: 补播背景音乐失败 " + e.Message); }
         }
 
+        /// <summary>
+        /// 录像里出现了 <c>StopSong</c>（原版的"成就音效先把音乐掐掉"）：
+        /// 忘掉目标曲目，否则 TickApply 下一帧又会把刚才那首放回去。
+        /// </summary>
+        public static void OnStopSong()
+        {
+            _wantClip = "";
+            _wantTime = 0f;
+            _appliedId = 0;
+            _timerAppliedId = 0;
+            _triedFallback = true;   // 别再用"补播"把它顶回来
+        }
+
         /// <summary>回放停止时清掉目标，别在后台继续补放。</summary>
         public static void Clear()
         {
