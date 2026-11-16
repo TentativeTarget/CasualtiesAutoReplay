@@ -87,6 +87,26 @@ namespace Together.Replay
         static float _nextFullDump;
         static int _lastBiome = int.MinValue;
         static bool _seedCaptured;
+        static bool _sigWritten;
+
+        // 世界实例编号：每出现一个新世界 +1。用来判断"这两段录的是不是同一个世界"，
+        // 比方块指纹可靠（玩家会把方块挖掉，指纹会变）。
+        static int _worldToken;
+        static bool _hadWorld;
+        static readonly System.Collections.Generic.Dictionary<int, string> _worldFiles =
+            new System.Collections.Generic.Dictionary<int, string>();
+
+        public static void TrackWorld()
+        {
+            try
+            {
+                var w = WorldGeneration.world;
+                bool exists = w != null && w.worldExists;
+                if (exists && !_hadWorld) { _worldToken++; _hadWorld = true; }
+                else if (!exists) _hadWorld = false;
+            }
+            catch { }
+        }
         static bool _rngCaptured;
         static double _nextKeyframe;
         static double _nextPhantomSync;
@@ -149,6 +169,7 @@ namespace Together.Replay
                 _bootstrapBytes = 0;
                 _bootstrapFlushed = false;
                 _chunkDumps = 0;
+                _sigWritten = false;
                 ReplayLog.Info("recorder: 已重置引导包缓存（新一局）");
             }
             catch { }
@@ -177,14 +198,21 @@ namespace Together.Replay
                 string sig = WorldSig();
                 if (!string.IsNullOrEmpty(sig)) writer.SetMeta("worldsig", sig);
 
-                if (!HasBootstrap && w2 != null && w2.worldExists && !string.IsNullOrEmpty(sig))
+                if (!HasBootstrap && w2 != null && w2.worldExists)
                 {
-                    int n = BorrowBootstrap(writer, _path, sig);
+                    // ① 优先借"本进程里同一个世界实例"的录像（最可靠）
+                    int n = 0;
+                    string donor;
+                    if (_worldFiles.TryGetValue(_worldToken, out donor) && System.IO.File.Exists(donor))
+                        n = BorrowFromFile(writer, donor);
+
+                    // ② 退而求其次：按指纹在本目录里找
+                    if (n == 0 && !string.IsNullOrEmpty(sig)) n = BorrowBootstrap(writer, _path, sig);
                     if (n > 0)
                     {
                         writer.SetMeta("bootstrap", "1");
                         _sawStartGame = true;
-                        ReplayLog.Info("recorder: 从同世界的旧录像借来引导包（" + n + " 条）");
+                        ReplayLog.Info("recorder: 从同世界的旧录像借来引导包（" + n + " 条，worldToken=" + _worldToken + "）");
                     }
                     else
                     {
@@ -244,6 +272,39 @@ namespace Together.Replay
                 return h.ToString("x16");
             }
             catch { return null; }
+        }
+
+        /// <summary>从指定文件复制引导段。</summary>
+        static int BorrowFromFile(ReplayWriter writer, string path)
+        {
+            int copied = 0;
+            try
+            {
+                using (var reader = new ReplayReader(path))
+                {
+                    string boot;
+                    if (!reader.Meta.TryGetValue("bootstrap", out boot) || boot != "1") return 0;
+
+                    long prevMs = -1;
+                    while (reader.TryRead(out var r))
+                    {
+                        if (r.Kind == ReplayKind.Chunk || r.Kind == ReplayKind.Keyframe) break;
+
+                        ushort dt = 0;
+                        if (prevMs >= 0)
+                        {
+                            long d = (long)r.TimeMs - prevMs;
+                            if (d > 0) dt = (ushort)Math.Min(ushort.MaxValue, d);
+                        }
+                        prevMs = r.TimeMs;
+
+                        writer.Write(r.Kind, r.Pov, r.Tick, dt, r.Data, r.Length);
+                        copied++;
+                    }
+                }
+            }
+            catch (Exception e) { ReplayLog.Warn("recorder: 复制引导段失败 " + e.Message); }
+            return copied;
         }
 
         /// <summary>从同世界的旧录像里复制引导段（第一条 Chunk/Keyframe 之前的所有记录）。</summary>
@@ -395,6 +456,11 @@ namespace Together.Replay
                 // 没进过世界 = 没引导包；记录数也很少 → 这种文件留着也没法回放
                 bool useless = !_sawStartGame && _writer != null && _writer.RecordCount < 800;
 
+                if (_sawStartGame)
+                {
+                    try { _worldFiles[_worldToken] = _path; } catch { }
+                }
+
                 _writer.Dispose();
                 _writer = null;
                 _player = null;
@@ -539,6 +605,23 @@ namespace Together.Replay
         public static void Tick()
         {
             if (_writer == null) return;
+            TrackWorld();
+
+            // 世界出现后再补写指纹（开局那一刻世界还没生成，算不出来）
+            if (!_sigWritten && WorldGeneration.world != null && WorldGeneration.world.worldExists)
+            {
+                try
+                {
+                    string s = WorldSig();
+                    if (!string.IsNullOrEmpty(s))
+                    {
+                        _writer.SetMeta("worldsig", s);
+                        _sigWritten = true;
+                    }
+                }
+                catch { }
+            }
+
             PerfReport();
             TryAttachPhantom();
             SyncPhantomBody();
