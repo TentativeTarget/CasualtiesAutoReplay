@@ -227,6 +227,20 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 - 卡片层号 = 整段最深到达层（用指令传送会和实际不符）
 - Together 自己在角色选择界面按 ESC 会叠出不可操作遮罩 —— **不是我们的问题**
 
+### 6.6b 攻击特效：持械的记录里没有特效名（`d7251fd` 已修，老文件救不回）
+
+原版攻击特效就是 `AttackInfo.attackAnim`，`Body.Attack` 里 **Instantiate 一次**。
+录制端只在"徒手 / ClawAnim"（`AttackSwingRecord.LastMelee`）时把它带进挥击记录，
+持械（非枪）走的是不带名字的 `Swing(id)` → 回放里 `prefab=null`，什么都不生成。
+
+实测 `010828`：1080 条挥击里**只有 13 条带名字**，而且全是打蜘蛛时的 `ClawAnim`；
+另外该文件里**一条弹道记录（Fx[1]）都没有**，说明那局没开枪（全是近战武器）。
+
+- 修法：`AttackSwingRecord.FreshFx()`（只认 150ms 内刚抓到的名字），
+  `Body.Attack` 与 `Body.UseItemInHand` 两条记录都带上；回放端改用"手里是不是枪"决定播不播 `ArmsSwing`。
+- **老录像补不回来**（名字根本没写进文件），要看持械特效必须重录。
+- 排查口诀：`CtrepStats <file> swing` 能直接数出"带特效名 / 无特效名"各多少条。
+
 ### 6.7【别再试】没有引导的录像，从主菜单播不了 —— 这是物理边界
 
 **一句话**：录像里没有「开局公告 + 世界种子」，客户端就没有世界可建，怎么补都没用。**不要再往这上面投入。**
