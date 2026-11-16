@@ -285,8 +285,8 @@ namespace Together.Replay
                 RemoveFakeClientNow();
                 BytesWritten = 0;
                 try { BytesWritten = new FileInfo(_path).Length; } catch { }
-                bool useless = !_sawStartGame && _writer != null && _writer.RecordCount < 400
-                               && _writer.DurationMs < 15000;
+                // 没进过世界 = 没引导包；记录数也很少 → 这种文件留着也没法回放
+                bool useless = !_sawStartGame && _writer != null && _writer.RecordCount < 800;
 
                 _writer.Dispose();
                 _writer = null;
