@@ -670,16 +670,28 @@ namespace Together.Replay
                                     // 但血量随后会被同步包纠正回来，所以照原版走最保真。
                                     bool started = false;
                                     try { best.Invoke("MeleeAttack", 0f); started = true; } catch { }
-                                    if (!started) { try { best.Invoke("MeleeAnim", 0f); } catch { } }
-                                    try
+
+                                    // 只有协程起不来时才自己补 tesla。
+                                    // 注意 tesla 是"循环"粒子：直接 Play() 会一直放，
+                                    // 原版是协程结束时把它停掉的，所以这里必须先关掉 loop。
+                                    if (!started)
                                     {
-                                        var f = typeof(GuardScript).GetField("tesla",
-                                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
-                                            | System.Reflection.BindingFlags.Instance);
-                                        var ps = f != null ? f.GetValue(best) as ParticleSystem : null;
-                                        if (ps != null) ps.Play();
+                                        try { best.Invoke("MeleeAnim", 0f); } catch { }
+                                        try
+                                        {
+                                            var f = typeof(GuardScript).GetField("tesla",
+                                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                                                | System.Reflection.BindingFlags.Instance);
+                                            var ps = f != null ? f.GetValue(best) as ParticleSystem : null;
+                                            if (ps != null)
+                                            {
+                                                var main = ps.main;
+                                                main.loop = false;      // 关键：否则永远不灭
+                                                ps.Play();
+                                            }
+                                        }
+                                        catch { }
                                     }
-                                    catch { }
                                 }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 守卫近战重放失败 " + e.Message); }
