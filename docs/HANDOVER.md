@@ -61,6 +61,7 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 
 | 提交 | 内容 |
 |---|---|
+| `191b5c2` | 录像头不再谎报 `bootstrap`；无引导文件从主菜单拒绝播放（见 6.1） |
 | `078c574` | 不录 `MusicManager.StopSong`（录到"停"会让回放音乐永久消失） |
 | `e46dde0` | 拆分音乐补丁；`StopSong()` 无参数不能声明 `__0` |
 | `f7d4451` | 录制/回放背景音乐 + 蜘蛛战斗音乐 |
@@ -96,32 +97,55 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 
 ## 6. 未解决 / 待验证
 
-### 6.1【阻塞】从主菜单直接播放录像 → 卡在大厅
+### 6.1【已定位，已修，待实机验证】从主菜单直接播放录像 → 卡在大厅
 
-**现象**：不进地图直接在 F8 点播放，客户端空转，永远停在菜单。
+**结论：不是 `StartGame` 没响应，是那份录像里压根没有引导。**
 
-**日志证据**：
+**证据**（`replay_5.5.2_20261117_002429.ctrp`，就是 00:28 那次卡住时播的文件）：
 
-```
-diag: chunks=0 les=0   world=null srvGen=False sampleFail=NullReferenceException
-diag: chunks=64 les=122 world=null ...
-[Error: Together] Net.DoUpdate: System.NullReferenceException
-```
+- meta 写着 `bootstrap=1`，但整份文件 991 条记录里 kind 只有 `Les / Chunk / Marker / Fx`：
+  **0 条 Broadcast、0 条 Unicast**，没有 `msgid=68`（`StartGameAnnouncement`）、
+  没有 `msgid=58`（`GenerateWorld_SeedAnnounce`），也没有 `gamestart_ms` / `seedhex`。
+- 日志里的 `bc=0` 完全对得上：回放端一条广播都没投递过，客户端没有种子/公告可响应，
+  `world` 只能是 null，Mod 网络更新在空场景里抛 NRE —— A/B 两个假设都不成立。
+- 6 份录像里 3 份中招（`000703` / `001858` / `002429`），3 份正常
+  （`000416` / `001748` / `002331`：都有 `msgid=68`@1.3~4.0s 紧跟 `58`）。
 
-**已查明**：
+**录制端根因**：`ReplayRecorder._sawStartGame` 是进程级静态字段，`Start()` 里不清零。
+上一个文件看到过开局公告，后面半路开录的文件头也会写 `bootstrap=1`，但一条引导都没写进去。
+（`_sawStartGame` 原来还在 `OnServerPacketCore` 里提前置位，导致公告本身都没进引导缓存。）
 
-- `ReplayPump.Begin()` 从来不加载场景（0.1/0.2 三个版本一致），只有 `Seek()` 里有 `SceneManager.LoadScene("SampleScene")`
-- 从菜单播放时，场景本该由游戏客户端在收到引导广播（种子公告 + `StartGame`）后自己加载
-- 本次失败说明"开世界"没触发：地形块/实体包都投递了，但 `world` 一直 null，Mod 网络更新在空场景里抛 NRE
+**已修**（`191b5c2`）：
 
-**未区分**：
+- 录制端 `Start()` 清零 `_sawStartGame` / `_rngCaptured` / `_seedCaptured`；
+  `_sawStartGame` 改为按内容置位（`NoteBootstrapRecord`：开局公告/种子真的写进当前文件、
+  或从别处复制进来才算），`Stop()` 写 `bootstrap` 时不再掺水，另写 `bootrec=1`。
+- 回放端 `Begin()` 按内容扫前 30 秒找公告：没有且当前不在世界里时**直接拒绝**并给出明确提示，
+  不再空转刷 NRE；在世界里则只警告。
+- 诊断：投递引导消息前后打印 `scene / prerun / world` 快照，`diag` 行加了 `prerun=`。
+- 卡片：引导判定改看 `bootrec` / `gamestart_ms` / `seedhex`，老文件不再显示"完整"。
 
-- A. 引导广播没送到（被 `BootstrapDone`/`WorldGate` 拦了）
-- B. 送到了但 5.5.2 的 `StartGame` 不响应（或需要 `ServerWorldState` 先就绪）
+**下一步实机验证**（按顺序，重启游戏后做；BepInEx 不热重载）：
 
-**下一步**：在广播投递处加一行日志（只加日志），确认 `StartGame` 是否进客户端。
+1. **不进地图**，F8 直接播 `002331`（有引导，54s）。看能不能进世界。
+   日志应有：
+   ```
+   replay: 投递引导 msgid=68 -> scene=… prerun=? world=false
+   replay: 引导已交给客户端 msgid=68 -> …
+   ```
+   2 秒内出现 `replay: 世界已就绪，继续投递` 或 `等世界就绪超时 45s`。
+   - `prerun=False` → 命中 5.5.2 的隐藏条件：`ClientReceiver_StartGameAnnouncement`
+     只在 `PreRunScript.instance != null` 时才 `WaitLoad()`，此时得走下面的参考修法。
+   - `prerun=True` 但 `world` 仍 null → 看 `diag` 的 `startingGame` / `srvGen` 再定位。
+2. 再点 `002429`（无引导）→ 应直接报错拒绝，不再卡死。
+3. 进一局后 F5 重新开录、退到菜单再进 → 新文件应带 `gamestart_ms` / `seedhex` / `bootrec=1`。
 
-**参考修法**（未实施）：`Begin()` 开头若场景不是 `SampleScene` 或 `WorldGeneration.world == null`，则置 `_restartPending` + `LoadScene("SampleScene")`，复用 `TickRestart()` 等世界就绪后再开播。
+**参考修法**（仍未实施，等第 1 步结果）：`Begin()` 开头若场景不是 `SampleScene` 或
+`WorldGeneration.world == null`，则置 `_restartPending` + `LoadScene("SampleScene")`，
+复用 `TickRestart()` 等世界就绪后再开播。
+
+**排查工具**：`tools/CtrepStats`（本机，不在仓库）—— `CtrepStats <file.ctrp> [headN|boot]`
+直接打印 meta、kind 直方图、msgid 直方图；`boot` 只列 Broadcast/Unicast/Marker。
 
 ### 6.2 台词回放未实证
 
@@ -180,6 +204,8 @@ diag: chunks=64 les=122 world=null ...
 [ ] 回菜单再开一局 → 仍自动录制
 [ ] 进世界 2 秒 → artpack: 读到 22 张素材
 [ ] F8 卡片有背景 + 立绘（左侧 16%、脚踩底边）
+[ ] 详情页"引导数据包"：只有真抓到公告的录像才显示"完整"
+[ ] 播无引导的录像 → 明确拒绝并提示，不再卡在大厅
 ```
 
 ---
@@ -191,4 +217,5 @@ diag: chunks=64 les=122 world=null ...
 | `tools/MetaScan/` | 读 .NET 元数据查类型/方法签名 |
 | `tools/extract_art.py` | UnityPy 离线导出素材（玩家不需要） |
 | `tools/check_meta.py` / `check_sig.py` | 打印录像头 meta |
+| `tools/CtrepStats/` | 解析 .ctrp：meta / kind 直方图 / msgid 直方图 / 头 N 条（`boot` 只列引导类） |
 | `replaymod-backup/` | 旧 DLL 与配置备份 |
