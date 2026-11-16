@@ -73,6 +73,17 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
+        /// <summary>记一条守卫近战（位置），回放时让最近的守卫重播近战特效（tesla）。</summary>
+        public static void GuardMelee(Vector2 pos)
+        {
+            if (_writer == null) return;
+            var payload = new byte[9];
+            payload[0] = 11;
+            BitConverter.GetBytes(pos.x).CopyTo(payload, 1);
+            BitConverter.GetBytes(pos.y).CopyTo(payload, 5);
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
         /// <summary>记一条守卫姿势（payload 已由 ReplayGuardPose 拼好，首字节 7）。</summary>
         public static void GuardPose(byte[] payload)
         {

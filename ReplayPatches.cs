@@ -846,6 +846,28 @@ namespace Together.Replay
             }
         }
 
+        /// <summary>录制：守卫近战（含 tesla 电击特效）。协程挂不住，所以只记开始位置，回放端重播同一段。</summary>
+        [HarmonyPatch]
+        internal static class GuardMeleeRecord
+        {
+            static MethodBase TargetMethod() => AccessTools.Method(typeof(GuardScript), "MeleeAttack");
+            static bool Prepare() => TargetMethod() != null;
+
+            static void Postfix(GuardScript __instance)
+            {
+                if (!ReplayRecorder.IsRecording || __instance == null) return;
+                try
+                {
+                    var lp = ScavPlayer.LocalPlayer;
+                    var pos = (Vector2)__instance.transform.position;
+                    if (lp != null && lp.body != null
+                        && Vector2.Distance(pos, lp.body.transform.position) > 60f) return;
+                    ReplayRecorder.GuardMelee(pos);
+                }
+                catch { }
+            }
+        }
+
         /// <summary>诊断：怪物死亡时记下它播的动画。</summary>
         [HarmonyPatch]
         internal static class GuardDeathProbePatch
@@ -1472,6 +1494,7 @@ namespace Together.Replay
                 (typeof(BloodSpawnRecord), "blood-spawn"),
                 (typeof(TalkerForcePatch), "talker-force"),
                 (typeof(TalkerTalkRecord), "talker-talk"),
+                (typeof(GuardMeleeRecord), "guard-melee"),
                 (typeof(ChatLogFilterPatch), "chat-log-filter"),
                 (typeof(InstantiateNameProbe), "instantiate-name-probe"),
                 (typeof(GuardPublishProbePatch), "guard-publish-probe"),

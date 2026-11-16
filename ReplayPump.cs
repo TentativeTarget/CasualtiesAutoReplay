@@ -649,6 +649,40 @@ namespace Together.Replay
                     // 粒子类特效：payload = 名称 + 世界坐标
                     try
                     {
+                        // 首字节 11 = 守卫近战（位置）→ 让最近守卫重播近战动画 + tesla 电击
+                        if (rec.Length >= 9 && rec.Data[0] == 11)
+                        {
+                            try
+                            {
+                                var gpos = new Vector2(BitConverter.ToSingle(rec.Data, 1),
+                                                       BitConverter.ToSingle(rec.Data, 5));
+                                GuardScript best = null;
+                                float bestD = 5f;
+                                foreach (var g in UnityEngine.Object.FindObjectsOfType<GuardScript>())
+                                {
+                                    if (g == null) continue;
+                                    float d = Vector2.Distance(g.transform.position, gpos);
+                                    if (d < bestD) { bestD = d; best = g; }
+                                }
+                                if (best != null)
+                                {
+                                    // 只重播视觉：MeleeAnim 协程 + tesla 粒子
+                                    try { best.Invoke("MeleeAnim", 0f); } catch { }
+                                    try
+                                    {
+                                        var f = typeof(GuardScript).GetField("tesla",
+                                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                                            | System.Reflection.BindingFlags.Instance);
+                                        var ps = f != null ? f.GetValue(best) as ParticleSystem : null;
+                                        if (ps != null) ps.Play();
+                                    }
+                                    catch { }
+                                }
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 守卫近战重放失败 " + e.Message); }
+                            return;
+                        }
+
                         // 首字节 10 = 台词（位置 + 说话者根节点名 + 文本）
                         if (rec.Length > 12 && rec.Data[0] == 10)
                         {
