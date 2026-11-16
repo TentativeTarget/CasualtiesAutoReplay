@@ -353,6 +353,18 @@ namespace Together.Replay
 
             static bool Prepare() => TargetMethod() != null;
 
+            /// <summary>
+            /// 这次攻击实际生成的特效预制体名。只在刚抓到过（150ms 内）才认，
+            /// 免得把上一次攻击、甚至旁边蜘蛛的 ClawAnim 张冠李戴过来。
+            /// </summary>
+            internal static string FreshFx()
+            {
+                if (string.IsNullOrEmpty(LastFx)) return null;
+                if (LastFxTime < 0f) return null;
+                if (Time.unscaledTime - LastFxTime > 0.15f) return null;
+                return LastFx;
+            }
+
             /// <summary>最近一次攻击用的特效预制体名（ClawAnim / 各种武器特效）。</summary>
             internal static int _fxLogs;
             internal static int _swingLogs;
@@ -439,7 +451,9 @@ namespace Together.Replay
                         break;
                     }
                     if (!found) return;          // 主机的 clientId 可能就是 0，不能用 0 判断失败
-                    ReplayRecorder.Swing(id);
+                    // 这里以前不带特效名：徒手走 SwingLocal 还能带上 ClawAnim，
+                    // 但"持械（非枪）"直接掉下来，录出来全是无名挥击 → 回放只剩手臂动画、没有特效。
+                    ReplayRecorder.Swing(id, FreshFx());
                 }
                 catch { }
             }
@@ -1329,7 +1343,7 @@ namespace Together.Replay
                         break;
                     }
                     if (!found) return;          // 主机的 clientId 可能就是 0，不能用 0 判断失败
-                    ReplayRecorder.Swing(id);
+                    ReplayRecorder.Swing(id, AttackSwingRecord.FreshFx());
                 }
                 catch { }
             }

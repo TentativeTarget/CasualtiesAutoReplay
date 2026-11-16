@@ -664,8 +664,17 @@ namespace Together.Replay
                                 try { fxName = System.Text.Encoding.UTF8.GetString(rec.Data, 1, rec.Length - 1); } catch { }
                             }
 
-                            // 只有近战（空手/爪）才播手臂挥击；枪械的开闭膛由实体同步带回
-                            bool melee = string.IsNullOrEmpty(fxName) || fxName == "ClawAnim";
+                            // 要不要播手臂挥击：看手里拿的是什么，而不是看有没有特效名。
+                            // 以前用"fxName 为空/ClawAnim 才算近战"，结果持械（非枪）的攻击
+                            // 录下来只有特效名、被判成非近战 → 手臂不动；反过来无名记录会被当成近战。
+                            bool gunNow = false;
+                            try
+                            {
+                                var heldNow = body.GetItem(body.handSlot);
+                                gunNow = heldNow != null && heldNow.GetComponent<GunScript>() != null;
+                            }
+                            catch { }
+                            bool melee = !gunNow || fxName == "ClawAnim";
                             if (melee)
                             {
                                 var st = body.armsAnimator.GetCurrentAnimatorStateInfo(0);
@@ -685,9 +694,11 @@ namespace Together.Replay
                                 }
                             }
                             CleanupFx();
+                            Transform limbForLog = null;
                             if (prefab != null)
                             {
                                 var limb = body.GetAttackingLimb();
+                                limbForLog = limb != null ? limb.transform : null;
                                 if (limb != null)
                                 {
                                     var fx = UnityEngine.Object.Instantiate(prefab);
@@ -699,8 +710,10 @@ namespace Together.Replay
                             }
 
                             _swingCount++;
-                            if (_swingCount <= 6)
-                                ReplayLog.Info("replay: 挥爪 player=" + rec.Pov + " fx=" + (fxName ?? "(默认)") + " ok=" + (prefab != null));
+                            if (_swingCount <= 12)
+                                ReplayLog.Info("replay: 挥爪 player=" + rec.Pov + " fx=" + (fxName ?? "(默认)")
+                                    + " melee=" + melee + " gun=" + gunNow + " ok=" + (prefab != null)
+                                    + (prefab != null && limbForLog == null ? " limb=null" : ""));
                         }
                     }
                     catch (Exception e) { ReplayLog.Warn("replay: 挥爪失败 " + e.Message); }
