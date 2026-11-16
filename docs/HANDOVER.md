@@ -210,6 +210,15 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 **配置**：`[Replay] MusicFallback`（默认 `true`）——录像那一刻本来静默时也补播一首，
 保证回放不是纯静音；关掉则严格按录像（会先静音到 177s 才起歌）。
 
+**守卫战斗音乐（`851239b`）**：原版是 `<GuardScript.MeleeAttack>` 协程开头
+`PlayerCamera.main.threatMusicTime = 5`，以及 `GuardScript.Update` 的射击分支每帧刷 5。
+回放不跑这些协程/AI，所以守卫打架全程没声。现在守卫近战记录多带一个主题号
+（payload 9→13 字节），回放时调 `ReplayMusic.PlayThreat(theme, 5f)` 补上。
+索引会按 `MusicManager.droneTracks.Count` 钳制——**越界会让 `MusicManager.Update` 每帧抛异常，
+反而彻底没音乐**。第一次触发会打印 `replay: 威胁 drone 列表 [0]=… [1]=…`，用来确认主题号对应哪条 drone。
+
+已知缺口：**守卫只开枪不上来近战**时没有可录的事件，那段音乐仍然依赖场景里守卫 AI 自己跑。
+
 **待实证**：需要重启游戏后回放这份文件，确认日志出现
 `replay: 补播背景音乐` / `replay: 音乐状态` / `replay: 音乐恢复 BeginAnew@0.0s`。
 
