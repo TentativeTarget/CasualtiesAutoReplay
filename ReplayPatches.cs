@@ -972,9 +972,13 @@ namespace Together.Replay
 
             static bool Prepare() => TargetMethod() != null;
 
-            static void Postfix(string __0, Vector2 __1, bool __2)
+            static void Postfix(object[] __args)
             {
-                Record(__0, __1, __2);
+                if (__args == null || __args.Length < 9) return;
+                var clip = __args[0] as string;
+                if (clip == null) return;
+                Record(clip, (Vector2)__args[1], (bool)__args[2],
+                       (bool)__args[7], (bool)__args[8], (float)__args[5], (float)__args[6]);
             }
 
             static int _globalLogs;
@@ -982,7 +986,9 @@ namespace Together.Replay
             static Vector2 _lastPos;
             static float _lastAt = -1f;
 
-            internal static void Record(string clip, Vector2 pos, bool is2D)
+            internal static void Record(string clip, Vector2 pos, bool is2D,
+                                        bool ignoreMixer = false, bool noReverb = false,
+                                        float volume = 1f, float pitch = 1f)
             {
                 if (!ReplayRecorder.IsRecording) return;
                 try
@@ -998,8 +1004,9 @@ namespace Together.Replay
                     // 全局（2D）音效：坐标是占位值，绝不能拿它做距离过滤
                     if (is2D)
                     {
-                        if (_globalLogs++ < 12) ReplayLog.Info("sound: 全局音效 " + clip);
-                        ReplayRecorder.SoundEvent(clip, pos, true);
+                        if (_globalLogs++ < 12)
+                            ReplayLog.Info("sound: 全局音效 " + clip + (ignoreMixer ? " (ignoreMixer)" : ""));
+                        ReplayRecorder.SoundEvent(clip, pos, true, ignoreMixer, noReverb, volume, pitch);
                         return;
                     }
 
@@ -1007,7 +1014,7 @@ namespace Together.Replay
                     if (lp == null || lp.body == null) return;
                     // 精度优先：远处的声音也要录（原来 40m 会把远处的爆炸/枪声整段抹掉）
                     if (Vector2.Distance(pos, lp.body.transform.position) > 120f) return;
-                    ReplayRecorder.SoundEvent(clip, pos);
+                    ReplayRecorder.SoundEvent(clip, pos, false, ignoreMixer, noReverb, volume, pitch);
                 }
                 catch { }
             }
@@ -1032,10 +1039,13 @@ namespace Together.Replay
 
             static bool Prepare() => TargetMethod() != null;
 
-            static void Postfix(AudioClip __0, Vector2 __1, bool __2)
+            static void Postfix(object[] __args)
             {
-                if (__0 == null) return;
-                SoundRecordPatch.Record(__0.name, __1, __2);
+                if (__args == null || __args.Length < 9) return;
+                var clip = __args[0] as AudioClip;
+                if (clip == null) return;
+                SoundRecordPatch.Record(clip.name, (Vector2)__args[1], (bool)__args[2],
+                                        (bool)__args[7], (bool)__args[8], (float)__args[5], (float)__args[6]);
             }
         }
 

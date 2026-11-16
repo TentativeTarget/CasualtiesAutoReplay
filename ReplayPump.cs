@@ -1151,6 +1151,28 @@ namespace Together.Replay
                             return;
                         }
 
+                        // 首字节 21 = 音效（带完整参数：is2D / ignoreMixer / noReverb / 音量 / 音高）
+                        //   ignoreMixer 是关键：成就音效故意绕过混音器，否则会被 MusicManager 压到听不见
+                        if (rec.Length > 18 && rec.Data[0] == 21)
+                        {
+                            try
+                            {
+                                var spos = new Vector2(BitConverter.ToSingle(rec.Data, 1),
+                                                       BitConverter.ToSingle(rec.Data, 5));
+                                byte fl = rec.Data[9];
+                                float vol = BitConverter.ToSingle(rec.Data, 10);
+                                float pit = BitConverter.ToSingle(rec.Data, 14);
+                                string sclip = System.Text.Encoding.UTF8.GetString(rec.Data, 18, rec.Length - 18);
+                                Sound.Play(sclip, spos, (fl & 1) != 0, false, null, vol, pit,
+                                           (fl & 2) != 0, (fl & 4) != 0);
+                                if (_globalSoundLogs++ < 12)
+                                    ReplayLog.Info("replay: 音效 " + sclip + " 2D=" + ((fl & 1) != 0)
+                                        + " ignoreMixer=" + ((fl & 2) != 0));
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 音效失败 " + e.Message); }
+                            return;
+                        }
+
                         // 首字节 18 = 全局(2D)音效（成就/UI/剧情）——必须按 2D 播，否则听见不到
                         if (rec.Length > 10 && rec.Data[0] == 18)
                         {

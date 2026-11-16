@@ -28,25 +28,42 @@ namespace Together.Replay
         /// ①录制时被 120m 距离过滤掐掉；②回放时按 3D 播在 (0,0)，玩家在世界里根本听不见。
         /// 2D 音效单独用 `Fx[18]` 记录，回放时按 2D 播。
         /// </summary>
-        public static void SoundEvent(string clip, Vector2 pos, bool is2D = false)
+        public static void SoundEvent(string clip, Vector2 pos,
+                                      bool is2D = false, bool ignoreMixer = false, bool noReverb = false,
+                                      float volume = 1f, float pitch = 1f)
         {
             if (_writer == null || string.IsNullOrEmpty(clip)) return;
             var nb = System.Text.Encoding.UTF8.GetBytes(clip);
 
-            if (is2D)
+            bool needsParams = is2D || ignoreMixer || noReverb
+                               || Mathf.Abs(volume - 1f) > 0.001f || Mathf.Abs(pitch - 1f) > 0.001f;
+
+            if (needsParams)
             {
-                var p2 = new byte[nb.Length + 10];
-                p2[0] = 18;                        // 18 = 全局(2D)音效
+                // Fx[21] = [x][y][flags][volume][pitch][名字]
+                //   flags bit0=is2D  bit1=ignoreMixer  bit2=noReverb
+                //
+                // ignoreMixer 必须带上：像 music/thornbackDefeat 这种"成就音效"是故意
+                // 绕过混音器播的（Mixer Volume 可能正被压到 -80dB），我们要是按普通音效播，
+                // 就会"响一下就被掐掉"。
+                var p2 = new byte[nb.Length + 18];
+                p2[0] = 21;
                 BitConverter.GetBytes(pos.x).CopyTo(p2, 1);
                 BitConverter.GetBytes(pos.y).CopyTo(p2, 5);
-                p2[9] = 1;                          // 标志位，留给以后扩展
-                Array.Copy(nb, 0, p2, 10, nb.Length);
+                byte flags = 0;
+                if (is2D) flags |= 1;
+                if (ignoreMixer) flags |= 2;
+                if (noReverb) flags |= 4;
+                p2[9] = flags;
+                BitConverter.GetBytes(volume).CopyTo(p2, 10);
+                BitConverter.GetBytes(pitch).CopyTo(p2, 14);
+                Array.Copy(nb, 0, p2, 18, nb.Length);
                 WriteToFile(ReplayKind.Fx, 0, p2, p2.Length);
                 return;
             }
 
             var payload = new byte[nb.Length + 9];
-            payload[0] = 2;                         // 2 = 3D 音效
+            payload[0] = 2;                         // 2 = 普通 3D 音效
             Array.Copy(nb, 0, payload, 1, nb.Length);
             BitConverter.GetBytes(pos.x).CopyTo(payload, nb.Length + 1);
             BitConverter.GetBytes(pos.y).CopyTo(payload, nb.Length + 5);
