@@ -9,7 +9,7 @@
     <LangVersion>latest</LangVersion>
     <AssemblyName>CasualtiesReplay</AssemblyName>
     <RootNamespace>Together.Replay</RootNamespace>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Version>0.2.1</Version>
     <AssemblyVersion>0.2.1.0</AssemblyVersion>
     <FileVersion>0.2.1.0</FileVersion>
