@@ -666,8 +666,11 @@ namespace Together.Replay
                                 }
                                 if (best != null)
                                 {
-                                    // 只重播视觉：MeleeAnim 协程 + tesla 粒子
-                                    try { best.Invoke("MeleeAnim", 0f); } catch { }
+                                    // 直接重播完整近战协程：伤害判定会打到实体上，
+                                    // 但血量随后会被同步包纠正回来，所以照原版走最保真。
+                                    bool started = false;
+                                    try { best.Invoke("MeleeAttack", 0f); started = true; } catch { }
+                                    if (!started) { try { best.Invoke("MeleeAnim", 0f); } catch { } }
                                     try
                                     {
                                         var f = typeof(GuardScript).GetField("tesla",
