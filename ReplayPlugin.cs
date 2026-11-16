@@ -238,7 +238,6 @@ namespace Together.Replay
                 ReplayGuardPose.TickRecording();   // 守卫姿势本地补录（模组同步只对有真实客户端的会话生效）
                 ReplayRecorder.Tick();
                 ReplayPump.TickRestart();   // seek 重载场景后，等场景就绪再重新开始播放
-                KeepPanelsOutOfMenus();     // 离开世界就关掉我们的面板，避免"看不见还挡操作"
                 ReplayMode.Tick();
                 TryAutoRecord();
                 ReplayDiag.Tick();
@@ -262,24 +261,6 @@ namespace Together.Replay
                 yield return new WaitForEndOfFrame();
                 ReplayGapProbe.Mark("frameEnd");
             }
-        }
-
-        /// <summary>
-        /// 我们的 IMGUI 面板会被游戏的 UGUI 盖住（看不见但仍拦截点击）。
-        /// 一旦离开世界（进菜单/角色选择/加载），就直接把它们关掉。
-        /// </summary>
-        static void KeepPanelsOutOfMenus()
-        {
-            try
-            {
-                bool inWorld = WorldGeneration.world != null && WorldGeneration.world.worldExists;
-                if (inWorld) return;
-
-                if (ReplayLightboxUi.Visible) { ReplayLightboxUi.Visible = false; ReplayLog.Info("ui: 离开世界，关闭光箱"); }
-                if (ReplayEditorUi.Visible) { ReplayEditorUi.Visible = false; ReplayLog.Info("ui: 离开世界，关闭剪辑器"); }
-                if (ReplayRecordUi.Visible) { ReplayRecordUi.Visible = false; ReplayLog.Info("ui: 离开世界，收起源录制面板"); }
-            }
-            catch { }
         }
 
         void TryAutoRecord()
