@@ -59,7 +59,8 @@ namespace Together.Replay
         public static bool InputBlocked => ReplayPump.IsActive && BlockMoveInput;
 
         /// <summary>我们自己的 UI（光箱/剪辑器）是否打开——此时屏蔽游戏输入。</summary>
-        public static bool UiOpen => ReplayLightboxUi.Visible || ReplayEditorUi.Visible;
+        public static bool UiOpen =>
+            ReplayLightboxUi.Visible || ReplayEditorUi.Visible || ReplayRecordUi.Visible;
         internal static ConfigEntry<bool> PovBindingCfg;
         /// <summary>诊断：不改世界生成相关的任何标志，让游戏按联机原流程生成。</summary>
         public static bool NoWorldGenForce = false;

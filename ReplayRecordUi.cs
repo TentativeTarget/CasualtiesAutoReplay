@@ -304,8 +304,11 @@ namespace Together.Replay
             // 关闭：Esc 或 点击面板外
             if (Visible && e > 0.99f)
             {
-                if (Input.GetKeyDown(KeyCode.Escape)) { ReplaySfx.Close(); Visible = false; return; }
                 var ev0 = Event.current;
+
+                // ESC 走 IMGUI 事件（Input 在我们面板打开时被屏蔽了）
+                if (ev0 != null && ev0.type == EventType.KeyDown && ev0.keyCode == KeyCode.Escape)
+                { ev0.Use(); ReplaySfx.Close(); Visible = false; return; }
                 if (ev0 != null && ev0.type == EventType.MouseDown && ev0.button == 0 && !target.Contains(ev0.mousePosition))
                 { ReplaySfx.Close(); Visible = false; return; }
             }
