@@ -1208,20 +1208,114 @@ namespace Together.Replay
 
             static bool Prepare() => TargetMethod() != null;
 
+            static int _capLogs, _capCount;
+            static readonly Dictionary<string, float> _capLast = new Dictionary<string, float>();
+
             static void Postfix(UnityEngine.Object original, UnityEngine.Object __result)
             {
                 try
                 {
-                    if (Time.unscaledTime > FxWindow.Until) return;
                     if (original == null || __result == null) return;
                     if (!(original is GameObject)) return;
                     string n = original.name;
                     if (string.IsNullOrEmpty(n)) return;
                     if (n.StartsWith("Body") || n.StartsWith("Limb")) return;
-                    FxWindow.Captured = n;
-                    AttackSwingRecord.LastFx = n;
-                    AttackSwingRecord.LastFxTime = Time.unscaledTime;
-                    if (FxWindow.Logs < 8) { FxWindow.Logs++; ReplayLog.Info("fx: 攻击窗口内生成 " + n); }
+
+                    // ① 攻击窗口内：记下"这一刀用的是哪个特效预制体"，给挥爪事件带名字
+                    if (Time.unscaledTime <= FxWindow.Until)
+                    {
+                        FxWindow.Captured = n;
+                        AttackSwingRecord.LastFx = n;
+                        AttackSwingRecord.LastFxTime = Time.unscaledTime;
+                        if (FxWindow.Logs < 8) { FxWindow.Logs++; ReplayLog.Info("fx: 攻击窗口内生成 " + n); }
+                    }
+
+                    // ② 通用捕获：凡是实例化出来、且"看着像特效"的物体，
+                    //    按"名字 + 世界坐标"记一条（和粒子走同一条回放通道）。
+                    //    死亡特效、攻击特效、碎屑、尘土大都是 Instantiate 出来的。
+                    if (!ReplayRecorder.IsRecording) return;
+                    if (!CaptureAll) return;
+                    var go = __result as GameObject;
+                    var tf = go != null ? go.transform : (__result as Component)?.transform;
+                    if (tf == null) return;
+
+                    bool visual = go != null && (go.GetComponent<ParticleSystem>() != null
+                                                 || go.GetComponent<Animator>() != null
+                                                 || go.GetComponent<SpriteRenderer>() != null);
+                    if (!visual) return;
+
+                    var lp = ScavPlayer.LocalPlayer;
+                    if (lp == null || lp.body == null) return;
+                    Vector2 pos = tf.position;
+                    if (Vector2.Distance(pos, lp.body.transform.position) > 80f) return;
+
+                    float now = Time.unscaledTime;
+                    if (_capLast.TryGetValue(n, out float lastT) && now - lastT < 0.02f) return;
+                    _capLast[n] = now;
+                    if (_capLast.Count > 512) _capLast.Clear();
+
+                    ReplayRecorder.Fx(n, pos);
+                    if (_capLogs++ < 12) ReplayLog.Info("fxcap: 生成 " + n + " @" + pos.x.ToString("0") + "," + pos.y.ToString("0"));
+                }
+                catch { }
+            }
+        }
+
+        /// <summary>通用特效/动画捕获开关（[Recording] CaptureAllEffects）。</summary>
+        internal static bool CaptureAll = true;
+
+        /// <summary>
+        /// 录制：任何 Animator.Play(string, …) 都记一条（名字 + 位置 + 层）。
+        /// 表现层调用网络里没有，死亡/攻击动画只能本地补录。
+        /// </summary>
+        [HarmonyPatch]
+        internal static class AnimStateRecord
+        {
+            static readonly List<MethodBase> _targets = new List<MethodBase>();
+            static readonly Dictionary<long, float> _last = new Dictionary<long, float>();
+            static int _logs, _drops;
+
+            static IEnumerable<MethodBase> TargetMethods()
+            {
+                _targets.Clear();
+                foreach (var m in typeof(UnityEngine.Animator).GetMethods(
+                             System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+                {
+                    if (m.Name != "Play") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length < 1 || ps[0].ParameterType != typeof(string)) continue;
+                    _targets.Add(m);
+                    yield return m;
+                }
+            }
+
+            static bool Prepare() { foreach (var _ in TargetMethods()) return true; return false; }
+
+            static void Postfix(Animator __instance, object[] __args)
+            {
+                if (!CaptureAll || !ReplayRecorder.IsRecording) return;
+                try
+                {
+                    if (__instance == null || __args == null || __args.Length == 0) return;
+                    string __0 = __args[0] as string;
+                    if (string.IsNullOrEmpty(__0)) return;
+                    int layer = 0;
+                    if (__args.Length > 1 && __args[1] is int l) layer = l;
+
+                    // 同一个 Animator 同一状态 100ms 内只记一次（Play 常被每帧重复调用）
+                    long key = ((long)__instance.GetInstanceID() << 20) ^ (uint)__0.GetHashCode() ^ layer;
+                    float now = Time.unscaledTime;
+                    if (_last.TryGetValue(key, out float t) && now - t < 0.1f) return;
+                    _last[key] = now;
+                    if (_last.Count > 2048) _last.Clear();
+
+                    var lp = ScavPlayer.LocalPlayer;
+                    Vector2 pos = __instance.transform.position;
+                    if (lp != null && lp.body != null
+                        && Vector2.Distance(pos, lp.body.transform.position) > 80f) return;
+
+                    ReplayRecorder.AnimState(pos, layer, __0);
+                    if (_logs++ < 12) ReplayLog.Info("animrec: " + __0 + " @" + pos.x.ToString("0") + "," + pos.y.ToString("0"));
                 }
                 catch { }
             }
@@ -1533,6 +1627,7 @@ namespace Together.Replay
                 (typeof(AttackSwingRecord), "attack-swing"),
                 (typeof(AttackInputRecord), "attack-input"),
                 (typeof(InstantiateFxWatch), "instantiate-fx"),
+                (typeof(AnimStateRecord), "anim-state"),
                 (typeof(FxProbe), "fx-probe"),
                 (typeof(LineFxProbe), "line-fx-probe"),
                 (typeof(LineSetPositionsProbe), "line-positions-probe"),

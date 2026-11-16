@@ -131,6 +131,26 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
+        /// <summary>
+        /// 记一条动画状态播放：payload = [17][x][y][layer][nameLen][state]。
+        /// 实体同步只带逻辑状态，动画/死亡/攻击这些"表现层调用"网络里没有，
+        /// 所以直接监听 Animator.Play，回放时对最近的那个 Animator 重放同一个状态。
+        /// </summary>
+        public static void AnimState(Vector2 pos, int layer, string state)
+        {
+            if (_writer == null || string.IsNullOrEmpty(state)) return;
+            var nb = System.Text.Encoding.UTF8.GetBytes(state);
+            if (nb.Length > 120) return;
+            var payload = new byte[11 + nb.Length];
+            payload[0] = 17;
+            BitConverter.GetBytes(pos.x).CopyTo(payload, 1);
+            BitConverter.GetBytes(pos.y).CopyTo(payload, 5);
+            payload[9] = (byte)Mathf.Clamp(layer, 0, 255);
+            payload[10] = (byte)nb.Length;
+            Array.Copy(nb, 0, payload, 11, nb.Length);
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
         /// <summary>记一条背景音乐变化：payload = [14][clip 名 或 "stop"]。</summary>
         public static void Music(string what)
         {

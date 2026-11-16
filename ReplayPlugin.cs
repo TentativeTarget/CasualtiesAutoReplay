@@ -132,6 +132,8 @@ namespace Together.Replay
             try { InjectFakeClient = Config.Bind("Recording", "InjectFakeClient", true, "注入假客户端 id，让只发给客户端的消息也能被录到。").Value; } catch { }
             try { FakeClientId = (ushort)Config.Bind("Recording", "FakeClientId", 250, "假客户端 id（不要与真实玩家 id 冲突）。").Value; } catch { }
             try { AutoSpectator = Config.Bind("Replay", "AutoSpectator", true, "进入世界后自动开启无 HUD 观战。").Value; } catch { }
+            try { ReplayPatches.CaptureAll = Config.Bind("Recording", "CaptureAllEffects", true,
+                "录制所有能挂的表现层：实例化特效（攻击/死亡/碎屑）+ 所有 Animator.Play。精度优先，体积会涨。").Value; } catch { }
             try { MusicFallback = Config.Bind("Replay", "MusicFallback", true,
                 "录像那一刻本来没在放音乐时，回放也补一首背景音乐（关掉=严格按录像，开局可能长时间没声）。").Value; } catch { }
             try { AutoCheats = Config.Bind("Replay", "AutoCheats", true, "进入回放时自动开启作弊（sv_cheats + 客户端作弊命令）。").Value; } catch { }

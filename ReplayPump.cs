@@ -617,7 +617,20 @@ namespace Together.Replay
         static int _seekStartMs;
         static int _seekDispatched;
         static float _lastSwingPlay = -1f;
-        static int _threatLogs, _threatMissLogs, _musicStateLogs;
+        static int _threatLogs, _threatMissLogs, _musicStateLogs, _animLogs, _animMiss;
+
+        // 动画事件可能一秒几十条，FindObjectsOfType 每次都扫全场会卡；半秒缓存一次
+        static Animator[] _animCache;
+        static float _animCacheAt = -1f;
+        static Animator[] AnimatorCache()
+        {
+            if (_animCache == null || Time.unscaledTime > _animCacheAt)
+            {
+                _animCache = UnityEngine.Object.FindObjectsOfType<Animator>();
+                _animCacheAt = Time.unscaledTime + 0.5f;
+            }
+            return _animCache;
+        }
         static int _fxCount;
         static int _fxMissLogs;
         static readonly System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<GameObject, float>> _fxList =
@@ -755,6 +768,45 @@ namespace Together.Replay
                                 }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 音乐重放失败 " + e.Message); }
+                            return;
+                        }
+
+                        // 首字节 17 = 动画状态（位置 + 层 + 状态名）→ 找最近的同状态 Animator 重放
+                        if (rec.Length > 11 && rec.Data[0] == 17)
+                        {
+                            try
+                            {
+                                var apos = new Vector2(BitConverter.ToSingle(rec.Data, 1),
+                                                       BitConverter.ToSingle(rec.Data, 5));
+                                int alayer = rec.Data[9];
+                                int alen = rec.Data[10];
+                                string astate = System.Text.Encoding.UTF8.GetString(rec.Data, 11, alen);
+                                int ahash = Animator.StringToHash(astate);
+
+                                Animator bestA = null;
+                                float bestAD = 4f;   // 只认 4m 内的（同名状态多半挂在不同的模型上）
+                                foreach (var an in AnimatorCache())
+                                {
+                                    if (an == null || !an.isActiveAndEnabled) continue;
+                                    float d = Vector2.Distance(an.transform.position, apos);
+                                    if (d > bestAD) continue;
+                                    bool has = false;
+                                    try { has = an.HasState(alayer, ahash); } catch { }
+                                    if (!has) continue;
+                                    bestAD = d;
+                                    bestA = an;
+                                }
+                                if (bestA != null)
+                                {
+                                    if (!(bestA.GetCurrentAnimatorStateInfo(alayer).shortNameHash == ahash))
+                                        bestA.Play(astate, alayer, 0f);
+                                    if (_animLogs++ < 12)
+                                        ReplayLog.Info("replay: 动画 " + astate + " @" + apos.x.ToString("0") + "," + apos.y.ToString("0")
+                                            + " d=" + bestAD.ToString("0.0"));
+                                }
+                                else if (_animMiss++ < 8) ReplayLog.Warn("replay: 动画 " + astate + " 找不到 Animator");
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 动画重放失败 " + e.Message); }
                             return;
                         }
 
