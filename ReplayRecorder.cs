@@ -93,6 +93,8 @@ namespace Together.Replay
         // 比方块指纹可靠（玩家会把方块挖掉，指纹会变）。
         static int _worldToken;
         static bool _hadWorld;
+        static int _cacheWorldToken = -1;
+
         static readonly System.Collections.Generic.Dictionary<int, string> _worldFiles =
             new System.Collections.Generic.Dictionary<int, string>();
 
@@ -165,12 +167,24 @@ namespace Together.Replay
             // 不清零会导致第二次开局仍在用上一局的种子/开局公告（甚至直接判定"已有引导"而不缓存）。
             try
             {
-                _bootstrapCache.Clear();
-                _bootstrapBytes = 0;
-                _bootstrapFlushed = false;
+                // 同一个世界里的再录：缓存留着，等下一段直接拼上去；
+                // 换了世界才清（否则会把上一张图的种子带进来）。
+                bool sameWorld = _bootstrapCache.Count > 0 && _cacheWorldToken == _worldToken;
+
+                if (!sameWorld)
+                {
+                    _bootstrapCache.Clear();
+                    _bootstrapBytes = 0;
+                    _bootstrapFlushed = false;
+                    ReplayLog.Info("recorder: 已重置引导包缓存（新一局）");
+                }
+                else
+                {
+                    ReplayLog.Info("recorder: 沿用同一世界的引导包缓存（" + _bootstrapCache.Count + " 条）");
+                }
+
                 _chunkDumps = 0;
                 _sigWritten = false;
-                ReplayLog.Info("recorder: 已重置引导包缓存（新一局）");
             }
             catch { }
 
@@ -200,13 +214,18 @@ namespace Together.Replay
 
                 if (!HasBootstrap && w2 != null && w2.worldExists)
                 {
-                    // ① 优先借"本进程里同一个世界实例"的录像（最可靠）
-                    int n = 0;
-                    string donor;
-                    if (_worldFiles.TryGetValue(_worldToken, out donor) && System.IO.File.Exists(donor))
-                        n = BorrowFromFile(writer, donor);
+                    // ① 最直接：内存里就存着这个世界的引导包，直接写进去
+                    int n = WriteCachedBootstrap(writer);
 
-                    // ② 退而求其次：按指纹在本目录里找
+                    // ② 内存没了（比如换过局）：借本进程里同一世界实例的录像
+                    if (n == 0)
+                    {
+                        string donor;
+                        if (_worldFiles.TryGetValue(_worldToken, out donor) && System.IO.File.Exists(donor))
+                            n = BorrowFromFile(writer, donor);
+                    }
+
+                    // ③ 再退一步：按指纹在目录里找
                     if (n == 0 && !string.IsNullOrEmpty(sig)) n = BorrowBootstrap(writer, _path, sig);
                     if (n > 0)
                     {
@@ -797,6 +816,23 @@ namespace Together.Replay
         public static bool BootstrapNeeded => !_bootstrapFlushed && _chunkDumps < 1;
 
         /// <summary>把引导阶段的消息存进缓存（无论当前是否在录），供 F6 片段复用。</summary>
+        /// <summary>把内存里的引导包缓存原样写进文件（半路开录时用）。</summary>
+        static int WriteCachedBootstrap(ReplayWriter writer)
+        {
+            if (writer == null || _bootstrapCache.Count == 0) return 0;
+            int n = 0;
+            try
+            {
+                foreach (var r in _bootstrapCache)
+                {
+                    writer.Write(r.Kind, r.Pov, r.Tick, r.Dt, r.Data, r.Data.Length);
+                    n++;
+                }
+            }
+            catch (Exception e) { ReplayLog.Warn("recorder: 写引导包缓存失败 " + e.Message); }
+            return n;
+        }
+
         static void CacheBootstrap(ReplayKind kind, byte pov, ushort tick, ushort dt, byte[] data, int len)
         {
             // 一直缓存到首轮地形快照完成：片段回放需要 开局公告 + 世界状态 + 地形 + 实体基线
@@ -806,6 +842,7 @@ namespace Together.Replay
             var copy = new byte[len];
             Buffer.BlockCopy(data, 0, copy, 0, len);
             _bootstrapCache.Add(new CachedRecord { Kind = kind, Pov = pov, Tick = tick, Dt = dt, Data = copy });
+            if (_cacheWorldToken < 0) _cacheWorldToken = _worldToken;
             _bootstrapBytes += len;
         }
 
