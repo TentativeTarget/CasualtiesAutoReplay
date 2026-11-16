@@ -30,10 +30,32 @@ namespace Together.Replay
         /// </summary>
         public static void SoundEvent(string clip, Vector2 pos,
                                       bool is2D = false, bool noReverb = false, bool ignoreMixer = false,
-                                      float volume = 1f, float pitch = 1f)
+                                      float volume = 1f, float pitch = 1f, float clipLength = -1f)
         {
             if (_writer == null || string.IsNullOrEmpty(clip)) return;
             var nb = System.Text.Encoding.UTF8.GetBytes(clip);
+
+            // 有 AudioClip 对象时把时长也记下来。
+            // 这游戏大量音效是"变体名"（plushie 的叫声就叫 1..10，脚步声同名的更多），
+            // 光靠名字回放时会撞上一堆同名 clip；带上时长就能挑出对的那个。
+            if (clipLength > 0f)
+            {
+                var p3 = new byte[nb.Length + 22];
+                p3[0] = 22;
+                BitConverter.GetBytes(pos.x).CopyTo(p3, 1);
+                BitConverter.GetBytes(pos.y).CopyTo(p3, 5);
+                byte f3 = 0;
+                if (is2D) f3 |= 1;
+                if (noReverb) f3 |= 2;
+                if (ignoreMixer) f3 |= 4;
+                p3[9] = f3;
+                BitConverter.GetBytes(volume).CopyTo(p3, 10);
+                BitConverter.GetBytes(pitch).CopyTo(p3, 14);
+                BitConverter.GetBytes(clipLength).CopyTo(p3, 18);
+                Array.Copy(nb, 0, p3, 22, nb.Length);
+                WriteToFile(ReplayKind.Fx, 0, p3, p3.Length);
+                return;
+            }
 
             bool needsParams = is2D || ignoreMixer || noReverb
                                || Mathf.Abs(volume - 1f) > 0.001f || Mathf.Abs(pitch - 1f) > 0.001f;

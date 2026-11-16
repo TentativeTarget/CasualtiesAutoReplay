@@ -629,14 +629,17 @@ namespace Together.Replay
         /// Resources.Load，所以像 music/thornbackDefeat 这种带路径的名字能解析，
         /// 而裸 clip 名（旧录像里记的）不能。这里两种都试，最后再按名字全场扫一遍。
         /// </summary>
-        static AudioClip ResolveClip(string name)
+        static AudioClip ResolveClip(string name, float wantLength = -1f)
         {
             if (string.IsNullOrEmpty(name)) return null;
-            if (_clipCache.TryGetValue(name, out var hit) && hit != null) return hit;
+            if (wantLength <= 0f && _clipCache.TryGetValue(name, out var hit) && hit != null) return hit;
 
             AudioClip c = null;
             try { c = Resources.Load<AudioClip>("Sounds/" + name); } catch { }
+            // 有目标时长时，名字对但时长不对 → 说明是另一个同名变体，继续往下找
+            if (c != null && wantLength > 0f && Mathf.Abs(c.length - wantLength) > 0.08f) c = null;
             if (c == null) { try { c = Resources.Load<AudioClip>(name); } catch { } }
+            if (c != null && wantLength > 0f && Mathf.Abs(c.length - wantLength) > 0.08f) c = null;
 
             // 按名字扫全场：只在名字"唯一"时才认。
             // 这游戏大量音效是变体名（"1"/"3"/"7"…），不同目录下同名的 clip 不止一个，
@@ -648,14 +651,27 @@ namespace Together.Replay
                 {
                     AudioClip found = null;
                     int same = 0;
+                    float bestLen = float.MaxValue;
                     foreach (var a in Resources.FindObjectsOfTypeAll<AudioClip>())
                     {
                         if (a == null) continue;
                         if (a.name != name && a.name != tail) continue;
-                        if (found == null) { found = a; same = 1; }
-                        else if (a != found) { same++; if (same > 1) break; }
+                        same++;
+                        if (wantLength > 0f)
+                        {
+                            // 有目标时长：挑时长最接近的（plushie 那种 1..10 的变体名全靠这个区分）
+                            float dl = Mathf.Abs(a.length - wantLength);
+                            if (dl < bestLen) { bestLen = dl; found = a; }
+                        }
+                        else if (found == null) found = a;
                     }
-                    if (same == 1) c = found;
+                    if (found != null && wantLength > 0f)
+                    {
+                        if (bestLen <= 0.08f) c = found;
+                        else if (_clipMissLogs++ < 8)
+                            ReplayLog.Warn("replay: 音效 " + name + " 没有时长匹配的变体（候选 " + same + " 个，最接近差 " + bestLen.ToString("0.00") + "s）");
+                    }
+                    else if (same == 1) c = found;
                     else if (same > 1 && _clipMissLogs++ < 8)
                         ReplayLog.Warn("replay: 音效名有歧义，跳过 " + name + "（同名 clip " + same + " 个）");
                 }
@@ -668,9 +684,10 @@ namespace Together.Replay
 
         /// <summary>回放一条录到的音效（参数顺序按原版签名：…, volume, pitch, noReverb, ignoreMixer）。</summary>
         static void PlayRecordedSound(string name, Vector2 pos, bool is2D,
-                                      bool noReverb, bool ignoreMixer, float volume, float pitch)
+                                      bool noReverb, bool ignoreMixer, float volume, float pitch,
+                                      float clipLength = -1f)
         {
-            var clip = ResolveClip(name);
+            var clip = ResolveClip(name, clipLength);
             if (clip == null)
             {
                 if (_clipMissLogs++ < 8) ReplayLog.Warn("replay: 找不到音效 " + name);
@@ -1208,6 +1225,24 @@ namespace Together.Replay
                                 if (_musicCtlLogs++ < 8) ReplayLog.Info("replay: 停 drone " + di);
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 停 drone 失败 " + e.Message); }
+                            return;
+                        }
+
+                        // 首字节 22 = 音效 + clip 时长（用来在同名变体里挑对的那个）
+                        if (rec.Length > 22 && rec.Data[0] == 22)
+                        {
+                            try
+                            {
+                                var p22 = new Vector2(BitConverter.ToSingle(rec.Data, 1),
+                                                      BitConverter.ToSingle(rec.Data, 5));
+                                byte f22 = rec.Data[9];
+                                float v22 = BitConverter.ToSingle(rec.Data, 10);
+                                float t22 = BitConverter.ToSingle(rec.Data, 14);
+                                float l22 = BitConverter.ToSingle(rec.Data, 18);
+                                string n22 = System.Text.Encoding.UTF8.GetString(rec.Data, 22, rec.Length - 22);
+                                PlayRecordedSound(n22, p22, (f22 & 1) != 0, (f22 & 2) != 0, (f22 & 4) != 0, v22, t22, l22);
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 音效失败 " + e.Message); }
                             return;
                         }
 

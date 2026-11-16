@@ -1008,7 +1008,7 @@ namespace Together.Replay
 
             internal static void Record(string clip, Vector2 pos, bool is2D,
                                         bool noReverb = false, bool ignoreMixer = false,
-                                        float volume = 1f, float pitch = 1f)
+                                        float volume = 1f, float pitch = 1f, float clipLength = -1f)
             {
                 if (!ReplayRecorder.IsRecording) return;
                 try
@@ -1026,14 +1026,14 @@ namespace Together.Replay
                     {
                         if (_globalLogs++ < 12)
                             ReplayLog.Info("sound: 全局音效 " + clip + (ignoreMixer ? " (ignoreMixer)" : ""));
-                        ReplayRecorder.SoundEvent(clip, pos, true, noReverb, ignoreMixer, volume, pitch);
+                        ReplayRecorder.SoundEvent(clip, pos, true, noReverb, ignoreMixer, volume, pitch, clipLength);
                         return;
                     }
 
                     // 原版行为严格遵守 + 精度优先：不做任何距离过滤。
                     // 原版 Sound.Play 对全世界的声音都会播，衰减由 AudioSource 自己算；
                     // 我们要是按距离丢，远处的爆炸/枪声就等于被我们"改没了"。
-                    ReplayRecorder.SoundEvent(clip, pos, false, noReverb, ignoreMixer, volume, pitch);
+                    ReplayRecorder.SoundEvent(clip, pos, false, noReverb, ignoreMixer, volume, pitch, clipLength);
                 }
                 catch { }
             }
@@ -1066,7 +1066,8 @@ namespace Together.Replay
                 // 这是字符串重载内部的那次调用：交给外层记录（外层带资源路径）
                 if (SoundRecordPatch.InStringCall) return;
                 SoundRecordPatch.Record(clip.name, (Vector2)__args[1], (bool)__args[2],
-                                        (bool)__args[7], (bool)__args[8], (float)__args[5], (float)__args[6]);
+                                        (bool)__args[7], (bool)__args[8], (float)__args[5], (float)__args[6],
+                                        clip.length);
             }
         }
 
