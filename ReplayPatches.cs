@@ -846,6 +846,45 @@ namespace Together.Replay
             }
         }
 
+        /// <summary>录制：战斗音乐（蜘蛛进入战斗时播放）。</summary>
+        [HarmonyPatch]
+        internal static class ThreatMusicRecord
+        {
+            static MethodBase TargetMethod() => AccessTools.Method(typeof(SpiderHandler), "PlayThreatMusic");
+            static bool Prepare() => TargetMethod() != null;
+
+            static void Postfix(SpiderHandler __instance)
+            {
+                if (!ReplayRecorder.IsRecording || __instance == null) return;
+                try { ReplayRecorder.ThreatMusic((Vector2)__instance.transform.position); } catch { }
+            }
+        }
+
+        /// <summary>录制：背景音乐切换（含层主题、Boss 音乐）。</summary>
+        [HarmonyPatch]
+        internal static class MusicRecordPatch
+        {
+            static IEnumerable<MethodBase> TargetMethods()
+            {
+                var t = typeof(MusicManager);
+                var play = t.GetMethod("PlaySong", new[] { typeof(AudioClip) });
+                var stop = t.GetMethod("StopSong");
+                if (play != null) yield return play;
+                if (stop != null) yield return stop;
+            }
+
+            static void Postfix(MethodBase __originalMethod, AudioClip __0 = null)
+            {
+                if (!ReplayRecorder.IsRecording) return;
+                try
+                {
+                    if (__originalMethod.Name == "StopSong") { ReplayRecorder.Music("stop"); return; }
+                    if (__0 != null) ReplayRecorder.Music(__0.name);
+                }
+                catch { }
+            }
+        }
+
         /// <summary>录制：守卫近战（含 tesla 电击特效）。协程挂不住，所以只记开始位置，回放端重播同一段。</summary>
         [HarmonyPatch]
         internal static class GuardMeleeRecord
@@ -1495,6 +1534,8 @@ namespace Together.Replay
                 (typeof(TalkerForcePatch), "talker-force"),
                 (typeof(TalkerTalkRecord), "talker-talk"),
                 (typeof(GuardMeleeRecord), "guard-melee"),
+                (typeof(ThreatMusicRecord), "threat-music"),
+                (typeof(MusicRecordPatch), "music"),
                 (typeof(ChatLogFilterPatch), "chat-log-filter"),
                 (typeof(InstantiateNameProbe), "instantiate-name-probe"),
                 (typeof(GuardPublishProbePatch), "guard-publish-probe"),

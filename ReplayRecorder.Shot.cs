@@ -73,6 +73,29 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
+        /// <summary>记一条战斗音乐触发（蜘蛛进入战斗），回放时让最近的蜘蛛重放。</summary>
+        public static void ThreatMusic(Vector2 pos)
+        {
+            if (_writer == null) return;
+            var payload = new byte[9];
+            payload[0] = 13;
+            BitConverter.GetBytes(pos.x).CopyTo(payload, 1);
+            BitConverter.GetBytes(pos.y).CopyTo(payload, 5);
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
+        /// <summary>记一条背景音乐变化：payload = [14][clip 名 或 "stop"]。</summary>
+        public static void Music(string what)
+        {
+            if (_writer == null || string.IsNullOrEmpty(what)) return;
+            var b = System.Text.Encoding.UTF8.GetBytes(what);
+            if (b.Length > 120) return;
+            var payload = new byte[b.Length + 1];
+            payload[0] = 14;
+            Array.Copy(b, 0, payload, 1, b.Length);
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
         /// <summary>记一条守卫近战（位置），回放时让最近的守卫重播近战特效（tesla）。</summary>
         public static void GuardMelee(Vector2 pos)
         {

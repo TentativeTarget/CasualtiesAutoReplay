@@ -649,6 +649,56 @@ namespace Together.Replay
                     // 粒子类特效：payload = 名称 + 世界坐标
                     try
                     {
+                        // 首字节 14 = 背景音乐变化（"stop" 或 clip 名）
+                        if (rec.Length > 1 && rec.Data[0] == 14)
+                        {
+                            try
+                            {
+                                string what = System.Text.Encoding.UTF8.GetString(rec.Data, 1, rec.Length - 1);
+                                MusicManager mm = null;
+                                foreach (var m in UnityEngine.Object.FindObjectsOfType<MusicManager>())
+                                { if (m != null) { mm = m; break; } }
+
+                                if (mm != null)
+                                {
+                                    if (what == "stop") { mm.StopSong(); }
+                                    else
+                                    {
+                                        AudioClip clip = null;
+                                        foreach (var c in Resources.FindObjectsOfTypeAll<AudioClip>())
+                                        {
+                                            if (c != null && c.name == what) { clip = c; break; }
+                                        }
+                                        if (clip != null) mm.PlaySong(clip);
+                                        else ReplayLog.Warn("replay: 找不到音乐 " + what);
+                                    }
+                                }
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 音乐重放失败 " + e.Message); }
+                            return;
+                        }
+
+                        // 首字节 13 = 战斗音乐（蜘蛛位置）→ 让最近的蜘蛛重放
+                        if (rec.Length >= 9 && rec.Data[0] == 13)
+                        {
+                            try
+                            {
+                                var tpos = new Vector2(BitConverter.ToSingle(rec.Data, 1),
+                                                       BitConverter.ToSingle(rec.Data, 5));
+                                SpiderHandler best = null;
+                                float bestD = 15f;
+                                foreach (var s in UnityEngine.Object.FindObjectsOfType<SpiderHandler>())
+                                {
+                                    if (s == null) continue;
+                                    float d = Vector2.Distance(s.transform.position, tpos);
+                                    if (d < bestD) { bestD = d; best = s; }
+                                }
+                                if (best != null) best.Invoke("PlayThreatMusic", 0f);
+                            }
+                            catch (Exception e) { ReplayLog.Warn("replay: 战斗音乐重放失败 " + e.Message); }
+                            return;
+                        }
+
                         // 首字节 11 = 守卫近战（位置）→ 让最近守卫重播近战动画 + tesla 电击
                         if (rec.Length >= 9 && rec.Data[0] == 11)
                         {
@@ -668,30 +718,26 @@ namespace Together.Replay
                                 {
                                     // 直接重播完整近战协程：伤害判定会打到实体上，
                                     // 但血量随后会被同步包纠正回来，所以照原版走最保真。
-                                    bool started = false;
-                                    try { best.Invoke("MeleeAttack", 0f); started = true; } catch { }
+                                    // 协程在幽灵守卫上容易半路断（内部有状态判断），
+                                    // 所以视觉自己补：挥臂动画 + tesla 粒子定时熄火。
+                                    try { best.Invoke("MeleeAnim", 0f); } catch { }
 
-                                    // 只有协程起不来时才自己补 tesla。
-                                    // 注意 tesla 是"循环"粒子：直接 Play() 会一直放，
-                                    // 原版是协程结束时把它停掉的，所以这里必须先关掉 loop。
-                                    if (!started)
+                                    try
                                     {
-                                        try { best.Invoke("MeleeAnim", 0f); } catch { }
-                                        try
+                                        var f = typeof(GuardScript).GetField("tesla",
+                                            System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                                            | System.Reflection.BindingFlags.Instance);
+                                        var ps = f != null ? f.GetValue(best) as ParticleSystem : null;
+                                        if (ps != null)
                                         {
-                                            var f = typeof(GuardScript).GetField("tesla",
-                                                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
-                                                | System.Reflection.BindingFlags.Instance);
-                                            var ps = f != null ? f.GetValue(best) as ParticleSystem : null;
-                                            if (ps != null)
-                                            {
-                                                var main = ps.main;
-                                                main.loop = false;      // 关键：否则永远不灭
-                                                ps.Play();
-                                            }
+                                            ps.Play();
+                                            var timer = ps.gameObject.GetComponent<ReplayTeslaTimer>();
+                                            if (timer == null) timer = ps.gameObject.AddComponent<ReplayTeslaTimer>();
+                                            timer.Target = ps;
+                                            timer.Lifetime = 0.6f;
                                         }
-                                        catch { }
                                     }
+                                    catch { }
                                 }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 守卫近战重放失败 " + e.Message); }
