@@ -11,7 +11,7 @@ namespace Together.Replay
     public sealed class ReplayPlugin : BaseUnityPlugin
     {
         public const string Guid = "casualties.together.replay";
-        public const string Version = "0.2.0";
+        public const string Version = "0.2.1";
 
         internal static ReplayPlugin Instance { get; private set; }
 

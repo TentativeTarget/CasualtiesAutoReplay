@@ -1,5 +1,43 @@
 # 更新日志
 
+## 0.2.1 — 2026-11-17
+
+### 回放能不能播（阻塞问题）
+- **从主菜单直接播放录像不再卡在大厅。** 录像头现在会真的带上「开局公告 + 世界种子」；
+  回放端按**内容**校验（不再相信 meta 里的 `bootstrap` 字段），没有引导的文件会明确拒绝并提示，
+  而不是在空场景里空转刷 NRE。
+- 修「同一个游戏进程里录第二份文件时」的静态字段泄漏：`bootstrap` 不再谎报、`biome` 不再丢失。
+
+### 音乐
+- 背景音乐补录「开录那一刻在放什么、放到第几秒」（`Fx[15]`），
+  `Begin`/`Seek` 重载场景把 `MusicManager` 重建了也能补放。
+- **战斗音乐改为状态采样**：逐帧记录 `PlayerCamera.threatMusicTime` + `currentThreatTheme`（`Fx[16]`）。
+  蜘蛛索敌、守卫对射、地震、水晶怪……谁触发的都不重要，只看结果。
+- **还原击杀成就音效的完整序列**（`ElderThornbackBehaviour.OnDestroy`）：
+  `StopDrone(15)` → `music/thornbackDefeat`(2D, ignoreMixer) → `StopSong()` → `threatMusicTime = 0`。
+- 音效按原版参数回放（`is2D` / `ignoreMixer` / `noReverb` / 音量 / 音高，新记录 `Fx[21]`）：
+  全局/成就类音效不再被距离过滤掐掉，也不再因为过混音器而被压没。
+- 同一次 `Sound.Play` 不再被两个重载重复录两份（回放里不会叠着放两遍）。
+
+### 战斗表现
+- **持械攻击的特效名不再丢失**（之前只有徒手的 `ClawAnim` 带名字，其余全是无名挥击）。
+- 挥击要不要播手臂动画，改成看手里拿的是不是枪，而不是看有没有特效名。
+- 动画补录：`Animator.Play` 全部重载（这游戏只有 4 处会调），回放时 15m 内就近匹配。
+
+### 原则（写进 `docs/HANDOVER.md` §0）
+- **精度优先于体积**：录像大可以接受，不为省字节抽稀/降采样。
+- **原版行为严格遵守**：该静默就静默、该停就停、不臆造数据；偏离必须显式开关。
+
+### 配置
+- 新增 `[Recording] CaptureAllEffects`（默认 `true`）：捕获实例化特效 + 所有动画状态。
+- 新增 `[Replay] MusicFallback`（默认 `false`）：严格按原版，不补播录像里没有的音乐。
+
+### 已知限制
+- 没有开局公告的旧录像无法从主菜单播放（物理边界，见 `docs/HANDOVER.md` 6.7）。
+- `Object.Instantiate` 是 UnityEngine 的 native 方法，Harmony 挂不上；
+  特效靠 `ParticleSystem.Play` + 攻击/死亡事件还原。
+- 纯守卫战会沿用上一次的威胁主题（原版 `GuardScript` 不设主题）——这是原版行为。
+
 ## 0.2.0 — 2026-11-16
 
 ### 回放还原度
