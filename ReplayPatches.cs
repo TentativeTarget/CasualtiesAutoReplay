@@ -906,7 +906,9 @@ namespace Together.Replay
                     var pos = (Vector2)__instance.transform.position;
                     if (lp != null && lp.body != null
                         && Vector2.Distance(pos, lp.body.transform.position) > 60f) return;
-                    ReplayRecorder.GuardMelee(pos);
+                    int theme = 0;
+                    try { if (PlayerCamera.main != null) theme = PlayerCamera.main.currentThreatTheme; } catch { }
+                    ReplayRecorder.GuardMelee(pos, theme);
                 }
                 catch { }
             }

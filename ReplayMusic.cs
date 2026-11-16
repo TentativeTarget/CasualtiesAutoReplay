@@ -157,6 +157,54 @@ namespace Together.Replay
             catch (Exception e) { ReplayLog.Warn("replay: 音乐恢复失败 " + e.Message); }
         }
 
+        static bool _dumpedDrones;
+        static int _threatApplies;
+
+        /// <summary>
+        /// 起一段"威胁音乐"（战斗 drone）。原版就是这么干的：
+        /// MusicManager.Update 每帧看 <c>PlayerCamera.threatMusicTime &gt; 0</c>，
+        /// 然后把 <c>droneOn[currentThreatTheme]</c> 拉起来，threatMusicTime 自己每帧 -1。
+        /// 索引超出 droneTracks 会让 MusicManager.Update 每帧抛异常 → 全程没音乐，所以这里必须钳制。
+        /// </summary>
+        public static void PlayThreat(int theme, float seconds, string why = null)
+        {
+            try
+            {
+                var cam = PlayerCamera.main;
+                if (cam == null) return;
+
+                int count = 0;
+                try { var mm = MM; if (mm != null && mm.droneTracks != null) count = mm.droneTracks.Count; } catch { }
+
+                if (!_dumpedDrones)
+                {
+                    _dumpedDrones = true;
+                    try
+                    {
+                        var mm = MM;
+                        var sb = new System.Text.StringBuilder("replay: 威胁 drone 列表");
+                        for (int i = 0; mm != null && mm.droneTracks != null && i < mm.droneTracks.Count; i++)
+                        {
+                            var dt = mm.droneTracks[i];
+                            sb.Append(" [").Append(i).Append("]=").Append(dt != null && dt.clip != null ? dt.clip.name : "null");
+                        }
+                        ReplayLog.Info(sb.ToString());
+                    }
+                    catch { }
+                }
+
+                if (theme < 1) theme = 1;
+                if (count > 0 && theme >= count) theme = count - 1;
+
+                cam.currentThreatTheme = theme;
+                cam.threatMusicTime = seconds;
+                if (_threatApplies++ < 8)
+                    ReplayLog.Info("replay: 威胁音乐 theme=" + theme + " " + seconds.ToString("0.0") + "s"
+                        + (string.IsNullOrEmpty(why) ? "" : "（" + why + "）"));
+            }
+            catch { }
+        }
+
         static bool _triedFallback;
 
         /// <summary>

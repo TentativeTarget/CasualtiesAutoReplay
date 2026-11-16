@@ -814,19 +814,15 @@ namespace Together.Replay
                                     if (near != null) theme = near.droneToPlay;
                                 }
 
-                                var cam = PlayerCamera.main;
-                                if (cam == null)
+                                if (PlayerCamera.main == null)
                                 {
                                     if (_threatMissLogs++ < 5) ReplayLog.Warn("replay: 战斗音乐重放失败 —— PlayerCamera.main 不在场");
                                 }
                                 else
                                 {
-                                    if (theme <= 0) theme = 1;   // 老文件找不到蜘蛛时给个非零主题，别静默没声
-                                    cam.currentThreatTheme = theme;
-                                    cam.threatMusicTime = 5f;    // 与原版威胁窗口一致，之后每帧 -1 递减
-                                    if (_threatLogs++ < 8)
-                                        ReplayLog.Info("replay: 战斗音乐 theme=" + theme
-                                            + (bestD >= 0 ? "（老格式，就近找蜘蛛 " + bestD.ToString("0.0") + "m）" : ""));
+                                    ReplayMusic.PlayThreat(theme, 5f,
+                                        "蜘蛛" + (bestD >= 0 ? " 就近" + bestD.ToString("0.0") + "m" : ""));
+                                    _threatLogs++;
                                 }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 战斗音乐重放失败 " + e.Message); }
@@ -855,6 +851,13 @@ namespace Together.Replay
                                     // 协程在幽灵守卫上容易半路断（内部有状态判断），
                                     // 所以视觉自己补：挥臂动画 + tesla 粒子定时熄火。
                                     try { best.Invoke("MeleeAnim", 0f); } catch { }
+
+                                    // 原版 <GuardScript.MeleeAttack> 协程第一件事就是
+                                    // PlayerCamera.main.threatMusicTime = 5；回放里我们只重播动画
+                                    // 不跑协程，所以战斗音乐得自己补上。
+                                    int guardTheme = -1;
+                                    if (rec.Length >= 13) guardTheme = BitConverter.ToInt32(rec.Data, 9);
+                                    ReplayMusic.PlayThreat(guardTheme, 5f, "守卫近战");
 
                                     try
                                     {

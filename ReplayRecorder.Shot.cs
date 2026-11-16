@@ -124,14 +124,19 @@ namespace Together.Replay
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
-        /// <summary>记一条守卫近战（位置），回放时让最近的守卫重播近战特效（tesla）。</summary>
-        public static void GuardMelee(Vector2 pos)
+        /// <summary>
+        /// 记一条守卫近战（位置 + 当时的威胁音乐主题号）。
+        /// 原版 MeleeAttack 协程里会把 PlayerCamera.threatMusicTime 设成 5，
+        /// 回放不跑那个协程，所以主题号一起记下来，回放端自己补音乐。
+        /// </summary>
+        public static void GuardMelee(Vector2 pos, int theme)
         {
             if (_writer == null) return;
-            var payload = new byte[9];
+            var payload = new byte[13];
             payload[0] = 11;
             BitConverter.GetBytes(pos.x).CopyTo(payload, 1);
             BitConverter.GetBytes(pos.y).CopyTo(payload, 5);
+            BitConverter.GetBytes(theme).CopyTo(payload, 9);
             WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
         }
 
