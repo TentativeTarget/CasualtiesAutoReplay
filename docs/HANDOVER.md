@@ -61,6 +61,8 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 
 | 提交 | 内容 |
 |---|---|
+| `f8754c5` | `_biomeRecorded` 按文件清零（第二份录像头里缺 `biome`） |
+| `7c8d09f` | 引导检查挪到应用天空/层号之前，拒绝播放不留副作用 |
 | `191b5c2` | 录像头不再谎报 `bootstrap`；无引导文件从主菜单拒绝播放（见 6.1） |
 | `078c574` | 不录 `MusicManager.StopSong`（录到"停"会让回放音乐永久消失） |
 | `e46dde0` | 拆分音乐补丁；`StopSong()` 无参数不能声明 `__0` |
@@ -144,6 +146,8 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 `WorldGeneration.world == null`，则置 `_restartPending` + `LoadScene("SampleScene")`，
 复用 `TickRestart()` 等世界就绪后再开播。
 
+**边界**：没有公告的录像救不回来，别再死磕 —— 见 6.7。
+
 **排查工具**：`tools/CtrepStats`（本机，不在仓库）—— `CtrepStats <file.ctrp> [headN|boot]`
 直接打印 meta、kind 直方图、msgid 直方图；`boot` 只列 Broadcast/Unicast/Marker。
 
@@ -178,6 +182,29 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 - 卡片层号 = 整段最深到达层（用指令传送会和实际不符）
 - Together 自己在角色选择界面按 ESC 会叠出不可操作遮罩 —— **不是我们的问题**
 
+### 6.7【别再试】没有引导的录像，从主菜单播不了 —— 这是物理边界
+
+**一句话**：录像里没有「开局公告 + 世界种子」，客户端就没有世界可建，怎么补都没用。**不要再往这上面投入。**
+
+为什么修不掉：
+
+- 引导只有三条来源：①录制时实时抓（游戏只在一局**真正开始时**发一次）；
+  ②把内存里的引导缓存写进新文件；③从同世界的旧录像里借。**②③都要求"当时世界还在"。**
+- 录完一份 → 回菜单 → **不新开局、只是读档续玩**进那张图：游戏不会再发公告，①永远等不到；
+  那一刻 `WorldGeneration.world == null`，②③全部跳过。**三条路同时断，与代码写法无关。**
+- 所以 0.2.0 时代那三份坏文件（`000703`/`001858`/`002429`）救不回来，重录也没用，
+  除非重新开一局（那种情况现在会自动抓到，见 6.1）。
+
+现在做的是"别骗人"，这就够了：
+
+- 录制端：没抓到就写 `bootstrap=0` + 日志 `recorder: 这份录像里没有开局公告/种子…`
+- 回放端：不在世界里点播放 → 直接拒绝并提示；在世界里 → 只警告，按现有地形播
+- 卡片：详情页显示"缺失（无法独立回放）"
+
+**真要继续做，只有 6.5 那条路**：`meta: parent=<文件名>` 引用父段、加载时串联。
+在那之前，**不要**再去试"在 `Begin()` 里自己 `LoadScene`"之类的补法 ——
+场景能加载起来，世界仍然没有，只会把"卡在大厅"变成"卡在世界生成"。
+
 ---
 
 ## 7. 关键设计结论（别再试错）
@@ -191,6 +218,8 @@ Copy-Item bin\Release\CasualtiesReplay.dll "<游戏>\BepInEx\plugins\Together\" 
 7. Harmony 目标方法带 `ref`/`out` 时不能用 `object[] __args`，要按位置声明参数（`Chat.LogMessage` 就是这么翻车的）
 8. 无参数方法声明 `__0` 会直接失败（`MusicManager.StopSong`）
 9. 一旦录到"停止音乐"，回放里音乐就永久没了 —— 所以 `StopSong` 不录
+10. **没有开局公告的录像 = 死文件**，主菜单播放无解（见 6.7）。别再试图补场景/补世界，
+    要么世界里播，要么走 6.5 的父子段串联
 
 ---
 
