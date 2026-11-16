@@ -78,6 +78,7 @@ namespace Together.Replay
         Harmony _harmony;
         float _nextAutoRecordTry;
         bool _autoRecordDone;
+        bool _wasServer;
 
         void Awake()
         {
@@ -264,8 +265,22 @@ namespace Together.Replay
 
         void TryAutoRecord()
         {
-            // 不在主机状态时重新装填：否则录过一次之后，换一局也不会再自动开始
-            try { if (!Net.IsServer && _autoRecordDone && !ReplayRecorder.IsRecording) _autoRecordDone = false; } catch { }
+            // 重新装填：① 重新进入主机状态 ② 离开世界且没在录
+            //    两者都算"新的一局"，否则录过一次之后换一局不会再自动开始
+            try
+            {
+                bool isServer = Net.IsServer;
+                bool inWorld = WorldGeneration.world != null && WorldGeneration.world.worldExists;
+
+                if (isServer && !_wasServer) { _autoRecordDone = false; ReplayLog.Info("recorder: 进入主机状态，重新武装自动录制"); }
+                if (!inWorld && !ReplayRecorder.IsRecording && _autoRecordDone)
+                {
+                    _autoRecordDone = false;
+                    ReplayLog.Info("recorder: 已离开世界，下一局可再次自动录制");
+                }
+                _wasServer = isServer;
+            }
+            catch { }
 
             if (!AutoRecord.Value || _autoRecordDone || ReplayRecorder.IsRecording) return;
             if (Time.unscaledTime < _nextAutoRecordTry) return;
@@ -277,7 +292,9 @@ namespace Together.Replay
 
             // 阶段一不要求 LES 就绪：先把文件和广播流开起来，
             // 幽灵玩家等 ServerEntityManager 出现再挂（见 ReplayRecorder.Tick）。
-            if (ReplayRecorder.Start()) _autoRecordDone = true;
+            bool ok = ReplayRecorder.Start();
+            if (ok) { _autoRecordDone = true; ReplayLog.Info("recorder: 自动录制已启动"); }
+            else ReplayLog.Warn("recorder: 自动录制启动失败");
         }
 
         void OnApplicationQuit()
