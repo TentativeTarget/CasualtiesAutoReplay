@@ -36,6 +36,7 @@
 | ~~怪物死亡动画~~ | **已修复** | 死亡入口因怪而异（蜘蛛是 `SpiderHandler.AnimalDeath`，既不是 `Body` 也不走 `GuardScript.Die`、更不是 `Destroy`），所以做成**泛化补录**：启动时扫 `Assembly-CSharp` / `CasualtiesMP`，把所有 `Die` / `Death` / `Kill` / `*Death` 的 0~1 参实例方法挂上钩子，死亡时记 `ReplayKind.Fx` 子类型 5（位置 + 类型名 + 方法名 + 参数个数，玩家 60m 内）；回放端按类型名找 4m 内最近对象、反射重放同一个方法。旧录像的子类型 4 仍兼容。限制：同类型目标挨太近时可能重放到错的那只 |
 | **回菜单后再开一局无法录** | 引导包不重录、自动录制失效，必须重启游戏 | 待修（2026-11-16 发现的）。疑点一：`_bootstrapFlushed` / `_bootstrapCache` / `_bootstrapBytes` 是静态字段且**从不清零**，第一次录制 Flush 之后 `BootstrapNeeded` 永远为 false → 第二局不再缓存引导包；疑点二：`_autoRecordDone` 虽在 `!Net.IsServer` 时复位，但 `Start()` 内部可能还有一次性状态（`_player`/`_writer`/幽灵未销毁）导致第二次返回 false。修法方向：在 `Start()` 开头把引导相关静态字段全部复位，并在会话结束时销毁幽灵 |
 | 台词 / 聊天 | 已实现，**待实机验证** | 台词：`ServerMain.TalkerSayAnnounce` → `AllClientIdsExceptHost`（假客户端已在列表里），走广播录制。聊天：模组按真实玩家逐个单播，假客户端收不到，改为主机侧挂 `Chat.LogMessage(tag,msg,ref bool)` 记 `Fx` 子类型 9，回放时反射调用同一入口 |
+| **F8 层名在对局外显示错层** | 主菜单（或未进世界时）看到的层名与实际不符；同一份录像在对局中看是对的 | 2026-11-17 报。`ReplayFileInfo.LayerName()` 优先用当前世界的 `biomeTitles[depth]`；主菜单里 `WorldGeneration.world == null`，于是回退到插件内置的静态表 `LayerNames[]`，而那张表的索引和游戏数组对不上（看起来差一位）。修法方向：①在游戏里 dump 一次 `biomeTitles` 对齐静态表；②更彻底：**录制时把层名写进录像 meta**，显示不再依赖运行时的表（也顺带解决旧文件跨版本看层名的问题） |
 | 旧录像没有音效/弹道/粒子 | 仅影响旧文件 | 这些是新加的记录类型 |
 | 素材容器 `replay_art.pak` | 已可用 | 首次生成前读过一次会缓存空结果；已加"为空则重试" |
 | ~~层原画映射~~ | **已修**（层号 +1 对齐） | `load_N` 对应游戏贴图 `worldgenN`，编号比层号大 1，所以查表用 `load_{层+1}`，缺失时回退 `load_{层}` / `load_{层-1}`。日志会打 `art: 层 N 用 load_M（+1 对齐 / 回退）` |
