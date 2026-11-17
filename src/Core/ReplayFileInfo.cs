@@ -22,6 +22,7 @@ namespace Together.Replay
             public string Names;      // 逗号分隔
             public string PlayersInfo; // 名称/种族;名称/种族
             public string SeedHex;
+            public string SeedHash;   // 整段种子消息的 15 位指纹（新增，老文件为空）
             public string Rng0;
             public int TickRate;
             public bool Generated;    // 是否记录到世界生成（seedhex 存在）
@@ -100,6 +101,7 @@ namespace Together.Replay
                     info.HasBootstrap = HasBootstrapMeta(meta);
                     info.IsClip = meta.Contains("mode=clip");
                     info.SeedHex = Meta(meta, "seedhex");
+                    info.SeedHash = Meta(meta, "seedhash");
                     info.Rng0 = Meta(meta, "rng0");
                     info.Names = Meta(meta, "names");
                     info.PlayersInfo = Meta(meta, "pinfo");

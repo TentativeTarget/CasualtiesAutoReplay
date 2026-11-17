@@ -322,5 +322,91 @@ namespace Together.Replay
             }
             catch (Exception e) { ReplayLog.Warn("diag failed: " + e.Message); }
         }
+
+        /// <summary>
+        /// 诊断：把背景层（视差墙 + 装饰）相关对象按名字统计并打印。
+        /// 用法：控制台 `replaydump bg`（需要 [Debug] Diagnostics=true）。
+        /// 在"正常进世界"和"回放"里各跑一次，对比缺了哪些名字。
+        /// </summary>
+        public static void DumpBackground()
+        {
+            try
+            {
+                var w = WorldGeneration.world;
+                if (w == null) { ReplayLog.Info("bg: 没有世界"); return; }
+
+                var t = w.GetType();
+                var f = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+
+                var chunks = t.GetField("chunks", f)?.GetValue(w) as Array;
+                var bgs = t.GetField("backgrounds", f)?.GetValue(w) as System.Collections.IList;
+                var drones = t.GetField("backgroundDrones", f)?.GetValue(w) as System.Collections.IList;
+
+                ReplayLog.Info("bg: biome=" + w.biomeDepth
+                    + " world=" + w.width + "x" + w.height
+                    + " chunks=" + (chunks != null ? chunks.Length.ToString() : "-")
+                    + " backgrounds=" + (bgs != null ? bgs.Count.ToString() : "-")
+                    + " drones=" + (drones != null ? drones.Count.ToString() : "-"));
+
+                if (bgs != null)
+                {
+                    int i = 0;
+                    foreach (var item in bgs)
+                    {
+                        GameObject go = item as GameObject;
+                        if (go == null) { var c = item as Component; if (c != null) go = c.gameObject; }
+                        if (go == null) { ReplayLog.Info("bg[" + i + "] <" + (item != null ? item.GetType().Name : "null") + ">"); continue; }
+
+                        var sr0 = go.GetComponent<SpriteRenderer>();
+                        ReplayLog.Info("bg[" + i + "] " + go.name
+                            + " active=" + go.activeSelf
+                            + " pos=" + go.transform.position
+                            + " children=" + go.transform.childCount
+                            + " sprite=" + (sr0 != null && sr0.sprite != null ? sr0.sprite.name : "-")
+                            + " layer=" + (sr0 != null ? sr0.sortingLayerName : "-")
+                            + " order=" + (sr0 != null ? sr0.sortingOrder : 0));
+
+                        int k = 0;
+                        foreach (Transform ch in go.transform)
+                        {
+                            var sr = ch.GetComponent<SpriteRenderer>();
+                            ReplayLog.Info("   child " + ch.name
+                                + " active=" + ch.gameObject.activeSelf
+                                + " sprite=" + (sr != null && sr.sprite != null ? sr.sprite.name : "-")
+                                + " layer=" + (sr != null ? sr.sortingLayerName : "-")
+                                + " order=" + (sr != null ? sr.sortingOrder : 0));
+                            if (++k >= 10) break;
+                        }
+                        if (++i >= 8) break;
+                    }
+                }
+
+                // 全场景 SpriteRenderer 直方图：按 sortingLayer + sprite 名统计
+                var byLayer = new System.Collections.Generic.Dictionary<string, int>();
+                var bySprite = new System.Collections.Generic.Dictionary<string, int>();
+                int total = 0;
+                foreach (var sr in Resources.FindObjectsOfTypeAll<SpriteRenderer>())
+                {
+                    if (sr == null || sr.gameObject == null || !sr.gameObject.scene.IsValid()) continue;
+                    total++;
+                    string layer = sr.sortingLayerName ?? "-";
+                    byLayer[layer] = byLayer.TryGetValue(layer, out int v) ? v + 1 : 1;
+                    string sn = sr.sprite != null ? sr.sprite.name : "<null>";
+                    bySprite[sn] = bySprite.TryGetValue(sn, out int v2) ? v2 + 1 : 1;
+                }
+
+                ReplayLog.Info("bg: SpriteRenderer 总数=" + total + " 层数=" + byLayer.Count);
+                foreach (var kv in byLayer) ReplayLog.Info("bg: layer " + kv.Key + " x" + kv.Value);
+
+                ReplayLog.Info("bg: sprite 种类=" + bySprite.Count);
+                int shown = 0;
+                foreach (var kv in bySprite)
+                {
+                    ReplayLog.Info("bg: sprite " + kv.Key + " x" + kv.Value);
+                    if (++shown >= 30) { ReplayLog.Info("bg: sprite …"); break; }
+                }
+            }
+            catch (Exception e) { ReplayLog.Warn("bg: dump 失败 " + e.Message); }
+        }
     }
 }

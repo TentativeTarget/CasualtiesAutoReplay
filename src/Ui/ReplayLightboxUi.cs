@@ -509,7 +509,9 @@ namespace Together.Replay
             Line(ref y, area, sc, "文件版本", has ? ReplayFileInfo.FormatText(inf) : "");
             Line(ref y, area, sc, "玩家", playersText);
             Line(ref y, area, sc, "地图种子",
-                has ? (string.IsNullOrEmpty(inf.SeedHex) ? "（未记录）" : inf.SeedHex) : "");
+                has ? (string.IsNullOrEmpty(inf.SeedHash)
+                        ? (string.IsNullOrEmpty(inf.SeedHex) ? "（未记录）" : inf.SeedHex)
+                        : inf.SeedHash) : "");
             Line(ref y, area, sc, "随机种子",
                 has ? (string.IsNullOrEmpty(inf.Rng0) ? "（未记录）" : inf.Rng0) : "");
             Line(ref y, area, sc, "引导数据包",

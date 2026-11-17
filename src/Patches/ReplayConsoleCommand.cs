@@ -33,7 +33,7 @@ namespace Together.Replay
                     try
                     {
                         ConsoleCommandRegistry.Register("replaydump",
-                            "Replay - dump ui names: replaydump scene|res",
+                            "Replay - dump debug info: replaydump bg|scene|res",
                             new Command.Action(OnReplayDump));
                     }
                     catch (Exception e) { ReplayLog.Warn("ui: 注册 replaydump 失败 " + e.Message); }
@@ -55,12 +55,16 @@ namespace Together.Replay
         {
             try
             {
+                string what = args != null && args.Length > 1 ? args[1].ToLowerInvariant() : "scene";
+
+                // bg 是只读统计，任何时候都允许
+                if (what.StartsWith("bg")) { ReplayDiag.DumpBackground(); return; }
+
                 if (!ReplayPlugin.Diagnostics)
                 {
-                    ReplayLog.Warn("replaydump: 需要 [Debug] Diagnostics=true 才能用（dump 会写文件到插件目录）");
+                    ReplayLog.Warn("replaydump: scene/res 需要 [Debug] Diagnostics=true（会写文件到插件目录）");
                     return;
                 }
-                string what = args != null && args.Length > 1 ? args[1].ToLowerInvariant() : "scene";
                 if (what.StartsWith("res")) ReplayDiag.DumpResourceNames();
                 else ReplayDiag.DumpSceneUi();
             }

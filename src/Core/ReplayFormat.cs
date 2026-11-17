@@ -38,7 +38,7 @@ namespace Together.Replay
         ///  - 次版本：只追加字段/元数据（同主版本内互相可读）。
         /// </summary>
         public const ushort VersionMajor = 7;   // 7.x：关键帧带层号
-        public const ushort VersionMinor = 0;
+        public const ushort VersionMinor = 3;   // 7.x：布局未变，只追加 meta 与新记录类型（7.1 种子指纹 / 7.2 灯光 / 7.3 背景墙装饰）
         public const ushort Version = VersionMajor;   // 兼容旧代码：主版本号
         /// <summary>
         /// 兼容策略：只保证兼容「当前版本」和「上一版」，跨 2 个大版本。
@@ -303,7 +303,6 @@ namespace Together.Replay
             BitConverter.TryWriteBytes(span, ReplayConst.Magic);
             BitConverter.TryWriteBytes(span.Slice(4), ReplayConst.VersionMajor);
             BitConverter.TryWriteBytes(span.Slice(6), ReplayConst.VersionMinor);
-            BitConverter.TryWriteBytes(span.Slice(6), (ushort)0);
             BitConverter.TryWriteBytes(span.Slice(8), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
             BitConverter.TryWriteBytes(span.Slice(16), (ulong)_dataEnd);
             BitConverter.TryWriteBytes(span.Slice(24), _recordCount);

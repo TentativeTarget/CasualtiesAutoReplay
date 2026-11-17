@@ -11,7 +11,7 @@ namespace Together.Replay
     public sealed class ReplayPlugin : BaseUnityPlugin
     {
         public const string Guid = "casualties.together.replay";
-        public const string Version = "0.2.1";
+        public const string Version = "0.2.2";
 
         internal static ReplayPlugin Instance { get; private set; }
 
@@ -31,7 +31,6 @@ namespace Together.Replay
         /// <summary>POV 观看时屏蔽移动轴输入（只读观看，防止操控录像里的身体）。</summary>
         public static bool BlockMoveInput = false;
         /// <summary>把热键注册进游戏自带的"设置 → 输入"页（走 SettingKeybind）。</summary>
-        public static bool UseGameKeybinds = true;
         /// <summary>诊断探针与详细日志。普通使用保持关闭，避免刷日志和额外开销。</summary>
         public static bool Diagnostics = false;
         /// <summary>回放开始时注入 CLIENT_forcespectator，让客户端自动进观战模式。</summary>
@@ -115,8 +114,7 @@ namespace Together.Replay
                 "主机一建立会话就自动开始全知录制（含世界生成引导，Host / DedicatedServer 都行）。");
 
             try { Diagnostics = Config.Bind("Debug", "Diagnostics", false, "开启诊断探针与详细日志（普通使用请保持关闭）。").Value; } catch { }
-            try { UseGameKeybinds = Config.Bind("Keys", "UseGameKeybinds", true, "把热键注册进游戏自带的按键设置页（关掉就只用配置文件里的 [Keys]）。").Value; } catch { }
-            try { ReplayKeys.Init(Config); } catch (Exception e) { Logger.LogWarning("keys: 初始化失败 " + e.Message); }
+            try { ReplayKeys.Init(); } catch (Exception e) { Logger.LogWarning("keys: 初始化失败 " + e.Message); }
             LogDependencies();   // 打印游戏/模组/CCL 版本与 API 能力
             ReplayPaths.OverrideDir = string.IsNullOrWhiteSpace(OutputDir.Value) ? null : OutputDir.Value;
             if (ReplayPaths.OverrideDir != null) Logger.LogInfo("recorder: 输出目录覆盖为 " + ReplayPaths.OverrideDir);
@@ -245,6 +243,8 @@ namespace Together.Replay
                     ReplayNpcProbe.Tick();     // 诊断：守卫/商人的视觉状态（录制 vs 回放）
                 }
                 ReplayGuardPose.TickRecording();   // 守卫姿势本地补录（模组同步只对有真实客户端的会话生效）
+                ReplayLights.Tick();             // 灯光状态本地补录（Light2D 颜色/强度）
+                ReplayWallholes.Tick();           // 背景墙装饰（wallholes）本地补录
                 ReplayRecorder.Tick();
                 ReplayPump.TickRestart();   // seek 重载场景后，等场景就绪再重新开始播放
                 ReplayMode.Tick();
@@ -327,8 +327,12 @@ namespace Together.Replay
                 try
                 {
                     ccl = AsmVersion(typeof(CUCoreLib.Registries.ConsoleCommandRegistry).Assembly);
-                    hasConsole = typeof(CUCoreLib.Registries.ConsoleCommandRegistry)
-                        .GetMethod("Register", new[] { typeof(string), typeof(string), typeof(Command.Action) }) != null;
+                    hasConsole = System.Linq.Enumerable.Any(
+                        typeof(CUCoreLib.Registries.ConsoleCommandRegistry).GetMethods(),
+                        m => m.Name == "Register"
+                            && m.GetParameters().Length >= 3
+                            && m.GetParameters()[0].ParameterType == typeof(string)
+                            && m.GetParameters()[1].ParameterType == typeof(string));
                     hasOptions = typeof(CUCoreLib.Registries.ModOptionsRegistry)
                         .GetMethod("Register", new[] { typeof(CUCoreLib.Data.ModOptionDefinition) }) != null;
                 }

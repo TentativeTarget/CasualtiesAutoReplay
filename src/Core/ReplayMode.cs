@@ -288,7 +288,7 @@ namespace Together.Replay
                 var list = listField?.GetValue(w) as System.Collections.IList;
                 int count = list?.Count ?? -1;
 
-                if (count > 0) { _bgDone = true; return; }
+                if (count > 0) { _bgDone = true; ReplayPump.ReapplyWallholes(); return; }
                 if (count == 0 && _bgDone) { _bgDone = false; ReplayLog.Info("replay: 视差背景丢失，重新创建"); }
 
                 // 先试原版入口
@@ -340,6 +340,7 @@ namespace Together.Replay
                 t.GetMethod("UpdateAllBackgroundColors", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)?.Invoke(w, null);
                 ReplayLog.Info("replay: 手工重建视差背景 path=" + path + " 块数=" + made + " biome=" + biome);
                 _bgDone = made > 0;
+                if (_bgDone) ReplayPump.ReapplyWallholes();
             }
             catch (Exception e) { ReplayLog.Warn("replay: 重建视差背景失败 " + e.GetBaseException().Message); _bgDone = true; }
         }

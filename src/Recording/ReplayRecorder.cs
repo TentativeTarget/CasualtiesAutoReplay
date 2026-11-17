@@ -881,6 +881,33 @@ namespace Together.Replay
         }
 
         /// <summary>只有"真的写进了当前文件（或复制进来）"才置位，避免录像头骗人。</summary>
+        /// <summary>把整段种子消息压成 15 位指纹（MD5 → Base32，去掉易混淆字符）。</summary>
+        public static string SeedHash(byte[] data, int off, int len)
+        {
+            try
+            {
+                using (var md5 = System.Security.Cryptography.MD5.Create())
+                {
+                    var h = md5.ComputeHash(data, off, len);
+                    const string A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+                    var sb = new System.Text.StringBuilder(26);
+                    int acc = 0, bits = 0;
+                    for (int i = 0; i < h.Length && sb.Length < 15; i++)
+                    {
+                        acc = (acc << 8) | h[i];
+                        bits += 8;
+                        while (bits >= 5 && sb.Length < 15)
+                        {
+                            sb.Append(A[(acc >> (bits - 5)) & 31]);
+                            bits -= 5;
+                        }
+                    }
+                    return sb.ToString();
+                }
+            }
+            catch { return ""; }
+        }
+
         static void NoteBootstrapRecord(byte[] data, int length)
         {
             if (_sawStartGame) return;
@@ -1249,9 +1276,13 @@ namespace Together.Replay
                 _seedCaptured = true;
                 try
                 {
+                    // 前 16 字节是消息头（所有录像都一样），真正的种子在后面；
+                    // 展示用的短指纹对整段 payload 做哈希，避免"看起来全都一样"。
                     var hex = BitConverter.ToString(data, 1, Math.Min(16, length - 1)).Replace("-", "");
+                    var seedFp = SeedHash(data, 1, length - 1);
                     _writer.SetMeta("seedhex", hex);
-                    ReplayLog.Info("recorder: 世界种子 " + hex);
+                    _writer.SetMeta("seedhash", seedFp);
+                    ReplayLog.Info("recorder: 世界种子指纹 " + seedFp + "（前段 " + hex + "）");
                 }
                 catch { }
             }

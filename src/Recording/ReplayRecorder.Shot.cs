@@ -339,5 +339,42 @@ namespace Together.Replay
             }
             catch { }
         }
+
+        /// <summary>
+        /// 背景墙装饰批次：payload = [19][count u16][biome u16]，
+        /// 随后每个 6 个 float：x y rot pitch parentX parentY。
+        /// </summary>
+        public static void Wallholes(int biome, System.Collections.Generic.List<ReplayWallholes.Hole> holes)
+        {
+            if (_writer == null || holes == null || holes.Count == 0) return;
+            if (holes.Count > 4000) holes = holes.GetRange(0, 4000);
+
+            var payload = new byte[5 + holes.Count * 24];
+            payload[0] = 24;   // 24 = 背景墙装饰（19 是"停歌"，别撞）
+            BitConverter.GetBytes((ushort)holes.Count).CopyTo(payload, 1);
+            BitConverter.GetBytes((ushort)biome).CopyTo(payload, 3);
+
+            int off = 5;
+            for (int i = 0; i < holes.Count; i++)
+            {
+                var h = holes[i];
+                BitConverter.GetBytes(h.Pos.x).CopyTo(payload, off + 0);
+                BitConverter.GetBytes(h.Pos.y).CopyTo(payload, off + 4);
+                BitConverter.GetBytes(h.Rot).CopyTo(payload, off + 8);
+                BitConverter.GetBytes(h.Pitch).CopyTo(payload, off + 12);
+                BitConverter.GetBytes(h.Parent.x).CopyTo(payload, off + 16);
+                BitConverter.GetBytes(h.Parent.y).CopyTo(payload, off + 20);
+                off += 24;
+            }
+
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
+
+        /// <summary>灯光状态批次（payload 已拼好，首字节 23）。</summary>
+        public static void Lights(byte[] payload)
+        {
+            if (_writer == null || payload == null || payload.Length < 3) return;
+            WriteToFile(ReplayKind.Fx, 0, payload, payload.Length);
+        }
     }
 }

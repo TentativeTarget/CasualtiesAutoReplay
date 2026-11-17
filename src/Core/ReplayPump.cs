@@ -101,6 +101,7 @@ namespace Together.Replay
 
             // meta 的 bootstrap 字段历史上会骗人（录制端的静态标志没清），所以按内容判定。
             HasBootstrapRecord = ScanBootstrapRecord();
+            ScanWallholes();
             if (!HasBootstrapRecord)
             {
                 bool inWorldNow = false;
@@ -293,6 +294,31 @@ namespace Together.Replay
         /// <summary>这份录像里是否真的存在世界引导记录（开局公告 / 世界种子）。meta 不可信，按内容判定。</summary>
         public static bool HasBootstrapRecord { get; private set; }
 
+        /// <summary>开局扫一遍文件，把背景墙装饰（Fx 19）存成状态——它不按时间事件重放。</summary>
+        static void ScanWallholes()
+        {
+            _lastWallholes = null;
+            if (_reader == null) return;
+            try
+            {
+                _reader.Restart();
+                int budget = 200000;
+                while (budget-- > 0 && _reader.TryRead(out var r))
+                {
+                    if (r.Kind == ReplayKind.Fx && r.Length > 5 && r.Data != null && (r.Data[0] == 24 || r.Data[0] == 19))
+                    {
+                        _lastWallholes = r.Data;
+                        ReplayLog.Info("replay: 预读到背景墙装饰（t=" + (r.TimeMs / 1000) + "s，"
+                            + BitConverter.ToUInt16(r.Data, 1) + " 个）");
+                        break;
+                    }
+                    if (r.TimeMs > 120000) break;
+                }
+            }
+            catch { }
+            finally { try { _reader.Restart(); } catch { } }
+        }
+
         static bool ScanBootstrapRecord()
         {
             if (_reader == null) return false;
@@ -347,6 +373,14 @@ namespace Together.Replay
                 return found > 1000 ? found - 1000 : found;
             }
             catch { return 0; }
+        }
+
+        static byte[] _lastWallholes;
+
+        /// <summary>世界（重）建好后补一次背景墙装饰：它是状态，不是事件。</summary>
+        public static void ReapplyWallholes()
+        {
+            if (_lastWallholes != null) ReplayWallholesApply.Apply(_lastWallholes);
         }
 
         public static void Stop(string reason)
@@ -1026,6 +1060,21 @@ namespace Together.Replay
                                 }
                             }
                             catch (Exception e) { ReplayLog.Warn("replay: 守卫近战重放失败 " + e.Message); }
+                            return;
+                        }
+
+                        // 首字节 23 = 灯光状态（位置 + 颜色 + 强度 + 开关）
+                        if (rec.Length > 3 && rec.Data[0] == 23)
+                        {
+                            ReplayLightsApply.Apply(rec.Data);
+                            return;
+                        }
+
+                        // 首字节 24 = 背景墙装饰（wallholes 位置/旋转/音高/父块）
+                        if (rec.Length > 5 && (rec.Data[0] == 24 || rec.Data[0] == 19))
+                        {
+                            _lastWallholes = rec.Data;          // 存成状态，世界重建后重放
+                            ReplayWallholesApply.Apply(rec.Data);
                             return;
                         }
 
