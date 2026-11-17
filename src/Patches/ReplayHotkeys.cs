@@ -19,7 +19,7 @@ namespace Together.Replay
         {
             try
             {
-                ReplayGameKeys.Refresh();   // 玩家在游戏设置里改键后立即生效
+                // 改键由 CUCoreLib 的 Keybind 选项回调即时生效，不需要再轮询
                 bool shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
 
                 if (ReplayKeys.Down(ReplayKeys.ClipMark)) { ReplayRecorder.OnClipKey(); _status = "片段打点"; }

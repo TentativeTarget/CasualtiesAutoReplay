@@ -117,6 +117,7 @@ namespace Together.Replay
             try { Diagnostics = Config.Bind("Debug", "Diagnostics", false, "开启诊断探针与详细日志（普通使用请保持关闭）。").Value; } catch { }
             try { UseGameKeybinds = Config.Bind("Keys", "UseGameKeybinds", true, "把热键注册进游戏自带的按键设置页（关掉就只用配置文件里的 [Keys]）。").Value; } catch { }
             try { ReplayKeys.Init(Config); } catch (Exception e) { Logger.LogWarning("keys: 初始化失败 " + e.Message); }
+            LogDependencies();   // 打印游戏/模组/CCL 版本与 API 能力
             ReplayPaths.OverrideDir = string.IsNullOrWhiteSpace(OutputDir.Value) ? null : OutputDir.Value;
             if (ReplayPaths.OverrideDir != null) Logger.LogInfo("recorder: 输出目录覆盖为 " + ReplayPaths.OverrideDir);
             NoWorldGenForce = nwgf.Value;
@@ -308,6 +309,46 @@ namespace Together.Replay
         void OnApplicationQuit()
         {
             if (ReplayRecorder.IsRecording) ReplayRecorder.Stop();
+        }
+
+        /// <summary>
+        /// 启动时打印依赖版本与 CCL API 可用性。
+        /// 我们跟随 Together 的版本走（CCL 随模组一起升级），
+        /// 这一行能区分"是游戏/模组变了"还是"我们自己的代码坏了"。
+        /// </summary>
+        static void LogDependencies()
+        {
+            try
+            {
+                string together = AsmVersion(typeof(Net).Assembly);
+                string ccl = "missing";
+                bool hasConsole = false, hasOptions = false;
+
+                try
+                {
+                    ccl = AsmVersion(typeof(CUCoreLib.Registries.ConsoleCommandRegistry).Assembly);
+                    hasConsole = typeof(CUCoreLib.Registries.ConsoleCommandRegistry)
+                        .GetMethod("Register", new[] { typeof(string), typeof(string), typeof(Command.Action) }) != null;
+                    hasOptions = typeof(CUCoreLib.Registries.ModOptionsRegistry)
+                        .GetMethod("Register", new[] { typeof(CUCoreLib.Data.ModOptionDefinition) }) != null;
+                }
+                catch { }
+
+                ReplayLog.Info("deps: game=" + Application.version + " together=" + together + " ccl=" + ccl
+                    + " consoleApi=" + (hasConsole ? "ok" : "missing")
+                    + " optionsApi=" + (hasOptions ? "ok" : "missing"));
+            }
+            catch (Exception e) { ReplayLog.Warn("deps: " + e.Message); }
+        }
+
+        static string AsmVersion(System.Reflection.Assembly asm)
+        {
+            try
+            {
+                var v = asm.GetName().Version;
+                return v != null ? v.ToString() : "?";
+            }
+            catch { return "?"; }
         }
     }
 }

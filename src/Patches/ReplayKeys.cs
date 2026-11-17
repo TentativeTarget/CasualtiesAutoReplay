@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Configuration;
+using CUCoreLib.Data;
+using CUCoreLib.Registries;
 using UnityEngine;
 
 namespace Together.Replay
@@ -35,6 +37,7 @@ namespace Together.Replay
             public KeyCode Default;
             public Action<KeyCode> Set;
             public string Label;
+            public bool Expose;   // 是否放进游戏设置页（诊断键不放）
         }
 
         static readonly List<Bind> _binds = new List<Bind>();
@@ -54,40 +57,56 @@ namespace Together.Replay
             Add(cfg, "Freecam", "F4", KeyCode.F4, "自由相机", k => Freecam = k);
             Add(cfg, "AnimDiag", "F11", KeyCode.F11, "动画诊断（+Shift = 场景诊断）", k => AnimDiag = k);
             Add(cfg, "ReloadArt", "F12", KeyCode.F12, "重载贴图（+Shift = 资源名诊断）", k => ReloadArt = k);
-            Add(cfg, "DumpScene", "Insert", KeyCode.Insert, "场景对象诊断", k => DumpScene = k);
-            Add(cfg, "DumpResources", "Delete", KeyCode.Delete, "资源名诊断", k => DumpResources = k);
-            Add(cfg, "DumpBiomes", "End", KeyCode.End, "生态区图诊断", k => DumpBiomes = k);
+            Add(cfg, "DumpScene", "Insert", KeyCode.Insert, "场景对象诊断", k => DumpScene = k, false);
+            Add(cfg, "DumpResources", "Delete", KeyCode.Delete, "资源名诊断", k => DumpResources = k, false);
+            Add(cfg, "DumpBiomes", "End", KeyCode.End, "生态区图诊断", k => DumpBiomes = k, false);
 
             // 同时注册进游戏自带的"设置 → 输入"页；用刚解析出来的配置值作为默认键
             DeclareGameKeys();
         }
 
+        /// <summary>
+        /// 把热键注册进游戏设置页（CUCoreLib 的 Keybind 选项，归到「回放」分页）。
+        /// 之前是自己反射造 SettingKeybind 塞进 Settings.DefaultSettings()，现在交给 CCL。
+        /// </summary>
         static void DeclareGameKeys()
         {
-            try
+            if (!ReplayPlugin.UseGameKeybinds) return;
+
+            int ok = 0;
+            foreach (var b in _binds)
             {
-                if (!ReplayPlugin.UseGameKeybinds) return;
-                ReplayGameKeys.Declare("回放: 录制开关", ToggleRecord, k => ToggleRecord = k);
-                ReplayGameKeys.Declare("回放: 片段打点", ClipMark, k => ClipMark = k);
-                ReplayGameKeys.Declare("回放: 录制面板", RecordPanel, k => RecordPanel = k);
-                ReplayGameKeys.Declare("回放: 光箱", Lightbox, k => Lightbox = k);
-                ReplayGameKeys.Declare("回放: 剪辑器", Editor, k => Editor = k);
-                ReplayGameKeys.Declare("回放: 播放暂停", PlayPause, k => PlayPause = k);
-                ReplayGameKeys.Declare("回放: 倍速", Speed, k => Speed = k);
-                ReplayGameKeys.Declare("回放: 后退 10 秒", Back10, k => Back10 = k);
-                ReplayGameKeys.Declare("回放: 前进 10 秒", Forward10, k => Forward10 = k);
-                ReplayGameKeys.Declare("回放: 观战", Spectator, k => Spectator = k);
-                ReplayGameKeys.Declare("回放: 自由相机", Freecam, k => Freecam = k);
-                ReplayGameKeys.Declare("回放: 动画诊断", AnimDiag, k => AnimDiag = k);
-                ReplayGameKeys.Declare("回放: 重载贴图", ReloadArt, k => ReloadArt = k);
+                if (!b.Expose) continue;
+                var bind = b;
+                try
+                {
+                    ModOptionsRegistry.Register(ModOptionDefinition.Keybind(
+                        "replay.key." + bind.Cfg.Definition.Key,
+                        "回放: " + bind.Label,
+                        bind.Label,
+                        Setting.SettingCategory.Input,   // 和原版按键放在同一页
+                        bind.Default,
+                        k =>
+                        {
+                            bind.Set(k);
+                            try { bind.Cfg.Value = k.ToString(); } catch { }
+                        }));
+                    ok++;
+                }
+                catch (Exception e)
+                {
+                    ReplayLog.Warn("keys: 注册 " + bind.Cfg.Definition.Key + " 失败 " + e.Message);
+                }
             }
-            catch (Exception e) { ReplayLog.Warn("keys: 注册游戏按键失败 " + e.Message); }
+
+            ReplayLog.Info("keys: 已注册 " + ok + " 个热键到设置页（CUCoreLib）");
         }
 
-        static void Add(ConfigFile cfg, string name, string def, KeyCode defKey, string desc, Action<KeyCode> set)
+        static void Add(ConfigFile cfg, string name, string def, KeyCode defKey, string desc, Action<KeyCode> set,
+            bool expose = true)
         {
             var entry = cfg.Bind("Keys", name, def, desc + "（KeyCode 名，例如 F5 / Space / Mouse0）");
-            var bind = new Bind { Cfg = entry, Default = defKey, Set = set, Label = name };
+            var bind = new Bind { Cfg = entry, Default = defKey, Set = set, Label = desc, Expose = expose };
             Apply(bind);
             entry.SettingChanged += (_, __) => Apply(bind);
             _binds.Add(bind);

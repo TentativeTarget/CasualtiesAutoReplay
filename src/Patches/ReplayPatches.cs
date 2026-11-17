@@ -1736,7 +1736,6 @@ namespace Together.Replay
                 (typeof(SpriteEnableProbe), "sprite-probe"),
                 (typeof(GunFireRecord), "gun-fire"),
                 (typeof(BlockClawOnGun), "block-claw-on-gun"),
-                (typeof(GameKeybindSettingsPatch), "game-keybinds"),
                 (typeof(BloodSpawnRecord), "blood-spawn"),
                 (typeof(TalkerForcePatch), "talker-force"),
                 (typeof(TalkerTalkRecord), "talker-talk"),
