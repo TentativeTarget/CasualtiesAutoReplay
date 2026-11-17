@@ -1,78 +1,56 @@
 using System;
-using System.Collections;
-using System.Reflection;
-using HarmonyLib;
+using CUCoreLib.Registries;
 using UnityEngine;
 
 namespace Together.Replay
 {
     /// <summary>
-    /// 注册控制台命令 replaypos（和 mod 的 chatboxpos 风格一致）：
-    ///   replaypos                 -> 恢复默认位置
+    /// 注册控制台命令（走 CUCoreLib 的 ConsoleCommandRegistry，不再自己反射造 Command）：
+    ///   replaypos                 -> 恢复录制按钮默认位置
     ///   replaypos x y [scale]     -> x/y 为 0~1 归一化坐标（0=最左/最下）
+    ///   replaydump scene|res      -> 诊断用（需 Diagnostics=true）
     /// </summary>
     internal static class ReplayConsoleCommand
     {
-        static bool _tried;
-        static float _nextTry;
+        static bool _done;
+        static float _next;
         static string _lastError;
 
         public static void Tick()
         {
-            if (_tried) return;
-            if (Time.unscaledTime < _nextTry) return;
-            _nextTry = Time.unscaledTime + 5f;
-            _tried = true;
+            if (_done) return;
+            if (Time.unscaledTime < _next) return;
+            _next = Time.unscaledTime + 2f;
+
             try
             {
-                var consoleType = AccessTools.TypeByName("ConsoleScript");
-                var cmdType = AccessTools.TypeByName("Command");
-                if (consoleType == null || cmdType == null) { _tried = false; return; }
+                ConsoleCommandRegistry.Register("replaypos",
+                    "Replay - set record button position: replaypos x y [scale] (0-1)",
+                    new Command.Action(OnReplayPos));
 
-                var instanceField = consoleType.GetField("instance", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-                var instance = instanceField?.GetValue(null);
-                if (instance == null) { _tried = false; return; }
-
-                var commandsField = consoleType.GetField("Commands", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                var list = commandsField?.GetValue(instance) as IList;
-                if (list == null) { _tried = false; return; }
-
-                var ctor = cmdType.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)[0];
-                var ps = ctor.GetParameters();
-
-                var handler = typeof(ReplayConsoleCommand).GetMethod(nameof(OnReplayPos), BindingFlags.Static | BindingFlags.NonPublic);
-                var del = Delegate.CreateDelegate(ps[2].ParameterType, handler);
-
-                var tupleArrayType = ps[4].ParameterType.GetElementType();
-                var arrTuple = Array.CreateInstance(tupleArrayType, 0);
-
-                var cmd = ctor.Invoke(new object[] { "replaypos", "Replay - set record button position: replaypos x y [scale] (0-1)", del, null, arrTuple });
-                list.Add(cmd);
-
-                // 诊断命令：replaydump scene | res
-                try
+                if (ReplayPlugin.Diagnostics)
                 {
-                    var dumpHandler = typeof(ReplayConsoleCommand).GetMethod(nameof(OnReplayDump), BindingFlags.Static | BindingFlags.NonPublic);
-                    var dumpDel = Delegate.CreateDelegate(ps[2].ParameterType, dumpHandler);
-                    var dumpCmd = ctor.Invoke(new object[] { "replaydump", "Replay - dump ui names: replaydump scene|res", dumpDel, null,
-                        Array.CreateInstance(tupleArrayType, 0) });
-                    list.Add(dumpCmd);
+                    try
+                    {
+                        ConsoleCommandRegistry.Register("replaydump",
+                            "Replay - dump ui names: replaydump scene|res",
+                            new Command.Action(OnReplayDump));
+                    }
+                    catch (Exception e) { ReplayLog.Warn("ui: 注册 replaydump 失败 " + e.Message); }
                 }
-                catch (Exception e) { ReplayLog.Warn("ui: 注册 replaydump 失败 " + e.Message); }
 
-                ReplayLog.Info("ui: 已注册控制台命令 replaypos / replaydump");
+                _done = true;
+                ReplayLog.Info("ui: 已注册控制台命令 replaypos（CUCoreLib）");
             }
             catch (Exception e)
             {
-                _tried = false;
                 if (_lastError != e.Message)
                 {
                     _lastError = e.Message;
-                    ReplayLog.Warn("ui: 注册 replaypos 失败 " + e.Message);
+                    ReplayLog.Warn("ui: 注册 replaypos 失败（稍后重试）" + e.Message);
                 }
             }
         }
-
         static void OnReplayDump(string[] args)
         {
             try

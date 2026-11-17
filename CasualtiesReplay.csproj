@@ -47,6 +47,10 @@
       <HintPath>$(ModDir)\CasualtiesMP.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="CUCoreLib">
+      <HintPath>$(ModDir)\..\CUCoreLib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="LiteEntitySystem">
       <HintPath>$(ModDir)\LiteEntitySystem.dll</HintPath>
       <Private>false</Private>
